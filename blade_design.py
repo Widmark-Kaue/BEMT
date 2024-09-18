@@ -54,4 +54,45 @@ plt.legend()
 plt.grid()
 plt.savefig(image_path.joinpath('LD_alpha.png'), format = 'png', dpi = 720)
 plt.show()
-# %%
+# %% Flow Angle and pitch angle
+alpha_opt = 5
+
+# Tip Speed Ratio
+TSR = 7
+
+# axial induction factor
+a = np.arange(0.1, 0.33334, 1e-5)
+
+# tangential induction factor
+a_dash = (1 - 3 *a)/(4*a - 1)
+
+# local rotational speed ratio
+num = a*( 1 - a)
+den = a_dash*(1 + a_dash)
+x = np.sqrt(num/den)
+
+# Flow angle
+phi = np.rad2deg(np.arctan((1 - a)/(1 + a_dash)/x))
+
+# Pitch angle
+theta_opt = phi - alpha_opt
+
+df = pd.DataFrame({'a':  a, 'a_dash': a_dash, 'x': x, 'phi': phi, 'theta': theta_opt} )
+
+# Plotting
+locs = theta_opt > 0
+plt.plot(x[locs]/TSR, theta_opt[locs],'k', label = 'Optimun pitch angle')
+
+plt.xlabel('r/R')
+plt.ylabel('pitch angle [deg]')
+
+plt.grid()
+plt.legend()
+plt.show()
+
+
+
+
+
+
+
