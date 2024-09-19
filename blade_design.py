@@ -64,27 +64,35 @@ TSR = 7
 a = np.arange(0.1, 0.33334, 1e-5)
 
 # tangential induction factor
-a_dash = (1 - 3 *a)/(4*a - 1)
+a_line = (1 - 3 *a)/(4*a - 1)
 
 # local rotational speed ratio
 num = a*( 1 - a)
-den = a_dash*(1 + a_dash)
+den = a_line*(1 + a_line)
 x = np.sqrt(num/den)
 
 # Flow angle
-phi = np.rad2deg(np.arctan((1 - a)/(1 + a_dash)/x))
+phi = np.rad2deg(np.arctan((1 - a)/(1 + a_line)/x))
 
 # Pitch angle
 theta_opt = phi - alpha_opt
 
-df = pd.DataFrame({'a':  a, 'a_dash': a_dash, 'x': x, 'phi': phi, 'theta': theta_opt} )
+df = pd.DataFrame({
+    'a':  a, 
+    'a_line': a_line, 
+    'x': x, 
+    'r/R': x/TSR,  
+    'phi': phi, 
+    'theta': theta_opt
+    } )
 
 # Plotting
 locs = theta_opt > 0
 plt.plot(x[locs]/TSR, theta_opt[locs],'k', label = 'Optimun pitch angle')
+plt.plot(x[locs]/TSR, phi[locs], 'k--', label = 'Flow angle')
 
 plt.xlabel('r/R')
-plt.ylabel('pitch angle [deg]')
+plt.ylabel(r'$\theta$, $\phi$ [deg]')
 
 plt.xlim([0,1])
 
