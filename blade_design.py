@@ -54,7 +54,7 @@ plt.legend()
 plt.grid()
 plt.savefig(image_path.joinpath('LD_alpha.png'), format = 'png', dpi = 720)
 plt.show()
-# %% Flow Angle and pitch angle
+# %% Flow Angle and Pitch Angle
 alpha_opt = 5
 
 # Tip Speed Ratio
@@ -86,6 +86,8 @@ plt.plot(x[locs]/TSR, theta_opt[locs],'k', label = 'Optimun pitch angle')
 plt.xlabel('r/R')
 plt.ylabel('pitch angle [deg]')
 
+plt.xlim([0,1])
+
 plt.grid()
 plt.legend()
 plt.show()
@@ -96,3 +98,6 @@ plt.show()
 
 
 
+
+# %%
+ 
