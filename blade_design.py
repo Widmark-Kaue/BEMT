@@ -129,7 +129,6 @@ plt.grid()
 plt.legend()
 plt.show()
 # %% Chord Distribution
-
 B = 2           # number of blades
 phi_rad = np.deg2rad(phi[locs])
 
