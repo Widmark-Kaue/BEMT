@@ -5,7 +5,6 @@ import matplotlib.pyplot as plt
 
 from matplotlib.colors import BASE_COLORS
 from pathlib import Path
-from read_files import process_file
 
 #%% Colors
 colors = list(BASE_COLORS.keys())
@@ -15,7 +14,29 @@ image_path = Path('images')
 image_path.mkdir(exist_ok=True)
 
 airfoil_path = Path('airfoil')
-#%%
+#%% functions
+def process_file(file_path) -> pd.DataFrame:
+    save_data = False
+    df = pd.DataFrame()
+    with open(file_path, 'r') as file:
+        lines = file.readlines()
+        i = 0
+        for line in lines:
+            if 'Average Reynolds #' in line:
+                reynolds  = float(lines[i+1])
+            
+            if 'Number of angles of attack:' in line:
+                number_of_aoa = int(lines[i+1])
+            
+            if 'alpha' in line:
+                data = np.array([[float(a.split()[0]), float(a.split()[1]), float(a.split()[2])] for a in lines[i+1: i+1+number_of_aoa]])
+                df[f'Re = {reynolds}'] = [data]
+            
+            i+=1
+    
+    return df
+              
+
 def blade_design(
     airfoil_name:str, 
     tip_speed_ratio:float, 
@@ -183,16 +204,18 @@ def blade_design(
     return df_sections
 
 #%% Example
-df1 = blade_design('s834', 7, 2, number_of_sections=20,plot=False)
-df2 = blade_design('s834', 7, 2, number_of_sections=20, section_distribution='sine', plot=False)
-df3 = blade_design('s834', 7, 2, number_of_sections=20, section_distribution='exp', plot=False)
 
-# %% Comparison between each distribution type
-plt.plot(df2['r/R'],df2['c/R'], '^--',label = 'Sine')
-plt.plot(df3['r/R'],df3['c/R'], 'o--',label = 'Exp')
-plt.plot(df1['r/R'],df1['c/R'], 's--',label = 'Uniform')
+if __name__ ==  "__main__":
+    df1 = blade_design('s834', 7, 2, number_of_sections=20,plot=False)
+    df2 = blade_design('s834', 7, 2, number_of_sections=20, section_distribution='sine', plot=False)
+    df3 = blade_design('s834', 7, 2, number_of_sections=20, section_distribution='exp', plot=False)
 
-plt.grid()
-plt.legend()
-plt.show()
+    # Comparison between each distribution type
+    plt.plot(df2['r/R'],df2['c/R'], '^--',label = 'Sine')
+    plt.plot(df3['r/R'],df3['c/R'], 'o--',label = 'Exp')
+    plt.plot(df1['r/R'],df1['c/R'], 's--',label = 'Uniform')
+
+    plt.grid()
+    plt.legend()
+    plt.show()
 # %%
