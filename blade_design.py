@@ -15,143 +15,184 @@ image_path = Path('images')
 image_path.mkdir(exist_ok=True)
 
 airfoil_path = Path('airfoil')
-#%% Plot airfoil
-x, y = np.loadtxt(airfoil_path.joinpath('S834.dat'), skiprows=1, unpack=True)
-
-plt.plot(x, y)
-plt.axis('equal')
-plt.grid()
-plt.savefig(image_path.joinpath('airfoil.png'), format = 'png', dpi = 720)
-plt.show()
-
-# %% Load c_lft file and plot Cl x alpha
-c_lift = process_file(airfoil_path.joinpath('s834_c_lft.txt'))
-cols = c_lift.columns
-
-for col in cols:
-    re = float(col.split()[-1])
-    plt.plot(c_lift[col][0][:,  0], c_lift[col][0][:, 1], label=f'Re = {re:.3e}')
-
-plt.title(r'Cl x $\alpha$')
-plt.xlabel(r'$\alpha$ [deg]')
-plt.ylabel('Cl')
-
-plt.legend()
-plt.grid()
-# plt.savefig(image_path.joinpath('cl_alpha.png'), format = 'png', dpi = 720)
-plt.show()
-
-# %% Load c_drg file and plot Cl/Cd x alpha
-c_lift_drag = process_file(airfoil_path.joinpath('s834_c_drg.txt'))
-cols = c_lift_drag.columns
-
-alpha_opt = []
-cl_opt  = []
-cd_opt = []
-re = []
-for i, col in enumerate(cols):
-    re.append(float(col.split()[-1]))
+#%%
+def blade_design(
+    airfoil_name:str, 
+    tip_speed_ratio:float, 
+    number_of_blades:int, 
+    number_of_sections:int = 50, 
+    section_distribution:str = 'uniform',
+    plot:bool = True
+    ) -> pd.DataFrame:
     
-    LD = c_lift_drag[col][0][:, 1]/c_lift_drag[col][0][:, 2]
-    alpha = c_lift_drag[col][0][:,  0]
+    #Load airfoil points
+    x, y = np.loadtxt(airfoil_path.joinpath(f'{airfoil_name}.dat'), skiprows=1, unpack=True)
+
+    ####  Load c_drg file and plot Cl/Cd x alpha
+    c_lift_drag = process_file(airfoil_path.joinpath(f'{airfoil_name}_c_drg.txt'))
+    cols = c_lift_drag.columns
+
+    alpha_opt = []
+    cl_opt  = []
+    cd_opt = []
+    re = []
     
-    opt_loc = np.where(LD == max(LD))[0][0]
-    alpha_opt.append(alpha[opt_loc])
-    cl_opt.append(c_lift_drag[col][0][opt_loc, 1])
-    cd_opt.append(c_lift_drag[col][0][opt_loc, 2])
+    fig, ax = plt.subplots(figsize=[10, 4.8])
     
-    plt.plot(alpha, LD, colors[i], label=f'Re = {re[-1]:.3e},'+ r' $\alpha_{opt} =$'+ f'{alpha_opt[-1]:.1f}°')
-    plt.plot(alpha_opt[-1], max(LD), f'{colors[i]}o')
+    for i, col in enumerate(cols):
+        re.append(float(col.split()[-1]))
+        
+        LD = c_lift_drag[col][0][:, 1]/c_lift_drag[col][0][:, 2]
+        alpha = c_lift_drag[col][0][:,  0]
+        
+        opt_loc = np.where(LD == max(LD))[0][0]
+        alpha_opt.append(alpha[opt_loc])
+        cl_opt.append(c_lift_drag[col][0][opt_loc, 1])
+        cd_opt.append(c_lift_drag[col][0][opt_loc, 2])
+        
+        ax.plot(alpha, LD, colors[i], label=f'Re = {re[-1]:.3e},'+ r' $\alpha_{opt} =$'+ f'{alpha_opt[-1]:.1f}°')
+        ax.plot(alpha_opt[-1], max(LD), f'{colors[i]}o')
 
-plt.title(r'L/D x $\alpha$')
-plt.xlabel(r'$\alpha$ [deg]')
-plt.ylabel('Cl/Cd')
+    ax.set_title(r'L/D x $\alpha$')
+    ax.set_xlabel(r'$\alpha$ [deg]')
+    ax.set_ylabel('Cl/Cd')
 
-plt.legend()
-plt.grid()
-# plt.savefig(image_path.joinpath('LD_alpha.png'), format = 'png', dpi = 720)
-plt.show()
-
-df_opt = pd.DataFrame({
-    'Re': re,
-    'alpha_opt': alpha_opt,
-    'cl_opt': cl_opt,
-    'cd_opt': cd_opt,
-})
-
-print(df_opt)
-# %% Flow Angle and Pitch Angle
-line_max_re = df_opt.loc[df_opt['Re'].idxmax()]
-print(line_max_re)
-
-alpha_opt = line_max_re['alpha_opt']
-
-# Tip Speed Ratio
-TSR = 7
-
-# axial induction factor
-a = np.arange(0.26, 0.3333, 1e-5)
-
-# tangential induction factor
-a_line = (1 - 3 *a)/(4*a - 1)
-
-# local rotational speed ratio
-num = a*( 1 - a)
-den = a_line*(1 + a_line)
-x = np.sqrt(num/den)
-
-# Flow angle
-phi = np.rad2deg(np.arctan((1 - a)/(1 + a_line)/x))
-
-# Pitch angle
-theta_opt = phi - alpha_opt
-
-df_sections = pd.DataFrame({
-    'a':  a, 
-    'a_line': a_line, 
-    'x': x, 
-    'r/R': x/TSR,  
-    'phi': phi, 
-    'theta': theta_opt
-    } )
-
-# Plotting
-locs = df_sections['r/R'] <= 1 #valid points
-
-
-plt.plot(x[locs]/TSR, theta_opt[locs],'k', label = 'Optimun pitch angle')
-plt.plot(x[locs]/TSR, phi[locs], 'k--', label = 'Flow angle')
-
-plt.xlabel('r/R')
-plt.ylabel(r'$\theta$, $\phi$ [deg]')
-
-plt.grid()
-plt.legend()
-plt.show()
-# %% Chord Distribution
-B = 2           # number of blades
-phi_rad = np.deg2rad(phi[locs])
-
-# Tip Prandtl's correction function
-f = B/2/np.sin(phi_rad) * (TSR/x[locs] - 1)
-F = 2/np.pi * np.arccos(np.exp(-f))
-
-# Tangential force coefficient
-Ct = line_max_re['cl_opt']*np.sin(phi_rad) - line_max_re['cd_opt']*np.cos(phi_rad)
-
-# Solidity
-sigma = 4*x[locs]*a_line[locs] * np.sin(phi_rad)**2/(1 - a[locs])/Ct
-
-# Chord Distributio
-c_R = 2*np.pi*sigma*x[locs]/(B*TSR)
+    ax.legend()
+    ax.grid()
     
-plt.plot(x[locs]/TSR, c_R, 'k')
-plt.plot(x[locs]/TSR, c_R*F, 'k--', label = 'With Tip Prandtl Correction')
+    # Arifoil plot
+    ax_inset = fig.add_axes([0.65, 0.15, 0.25, 0.25])
+    ax_inset.plot(x, y, 'k', label = airfoil_name)
+    
+    ax_inset.set_xticks([])
+    ax_inset.set_yticks([])
+    ax_inset.set_xticklabels([])
+    ax_inset.set_yticklabels([])
+    ax_inset.axis('equal')
+    ax_inset.legend()
+    
+    if plot:
+        plt.show()
+    else:
+        plt.close()
 
-plt.title('Chord Distribution')
-plt.xlabel(r'$r/R$')
-plt.ylabel(r'$c/R$')
+    df_opt = pd.DataFrame({
+        'Re': re,
+        'alpha_opt': alpha_opt,
+        'cl_opt': cl_opt,
+        'cd_opt': cd_opt,
+    })
+    
+    #### Flow Angle and Pitch Angle
+    line_max_re = df_opt.loc[df_opt['Re'].idxmax()]
 
-plt.legend()
+    alpha_opt = line_max_re['alpha_opt']
+
+    # axial induction factor
+    x0 = 0.26
+    xf = 0.3333
+    points = np.linspace(0, 1, number_of_sections)
+    
+    if section_distribution.lower() == 'uniform':
+        a = points *(xf - x0) + x0    
+    elif section_distribution.lower() == 'sine':
+        a = 0.5*(1 + np.cos(np.pi * points)) * (xf - x0) + x0
+    elif section_distribution.lower() == 'exp':
+        k = 5
+        a = (1 - np.exp(-k * points))  * (xf - x0) + x0
+
+
+    # tangential induction factor
+    a_line = (1 - 3 *a)/(4*a - 1)
+
+    # local rotational speed ratio
+    num = a*( 1 - a)
+    den = a_line*(1 + a_line)
+    x = np.sqrt(num/den)
+
+    # Flow angle
+    phi = np.rad2deg(np.arctan((1 - a)/(1 + a_line)/x))
+
+    # Pitch angle
+    theta_opt = phi - alpha_opt
+
+    df_sections = pd.DataFrame({
+        'a':  a, 
+        'a_line': a_line, 
+        'x': x, 
+        'r/R': x/tip_speed_ratio,  
+        'phi': phi, 
+        'theta': theta_opt
+        } )
+
+    # Plotting
+    locs = df_sections['r/R'] <= 1 #valid points
+    
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=[10, 8])
+    
+    ax1.plot(x[locs]/tip_speed_ratio, theta_opt[locs],'k', label = 'Optimun pitch angle')
+    ax1.plot(x[locs]/tip_speed_ratio, phi[locs], 'k--', label = 'Flow angle')
+
+    ax1.set_title('Pitch and Flow Angle')
+    # ax1.set_xlabel('r/R')
+    ax1.set_ylabel(r'$\theta$, $\phi$ [deg]')
+
+    ax1.grid()
+    ax1.legend()
+        
+    ### Chord Distribution
+    B = number_of_blades          
+    phi_rad = np.deg2rad(phi[locs])
+
+    # Tip Prandtl's correction function
+    f = B/2/np.sin(phi_rad) * (tip_speed_ratio/x[locs] - 1)
+    F = 2/np.pi * np.arccos(np.exp(-f))
+
+    # Tangential force coefficient
+    Ct = line_max_re['cl_opt']*np.sin(phi_rad) - line_max_re['cd_opt']*np.cos(phi_rad)
+
+    # Solidity
+    sigma = 4*x[locs]*a_line[locs] * np.sin(phi_rad)**2/(1 - a[locs])/Ct
+
+    # Chord Distributio
+    c_R = 2*np.pi*sigma*x[locs]/(B*tip_speed_ratio)
+    
+    ### Filter and Save data in dataframe
+    df_sections = df_sections[df_sections['r/R'] <= 1]
+    
+    df_sections['sigma'] = sigma
+    df_sections['c/R'] = c_R
+    df_sections['Ct'] = Ct
+    df_sections['Tip Correction'] = F
+        
+    ax2.plot(x[locs]/tip_speed_ratio, c_R, 'ks-',  label = 'Without Tip Correction')
+
+    ax2.plot(x[locs]/tip_speed_ratio, c_R*F, 'ko--', label = 'With Tip Correction')
+
+    ax2.set_title('Chord Distribution')
+    ax2.set_xlabel(r'$r/R$')
+    ax2.set_ylabel(r'$c/R$')
+
+    ax2.legend()
+    ax2.grid()
+    if plot:
+        plt.show()
+    else:
+        plt.close()
+        
+    return df_sections
+
+#%% Example
+df1 = blade_design('s834', 7, 2, number_of_sections=20,plot=False)
+df2 = blade_design('s834', 7, 2, number_of_sections=20, section_distribution='sine', plot=False)
+df3 = blade_design('s834', 7, 2, number_of_sections=20, section_distribution='exp', plot=False)
+
+# %% Comparison between each distribution type
+plt.plot(df2['r/R'],df2['c/R'], '^--',label = 'Sine')
+plt.plot(df3['r/R'],df3['c/R'], 'o--',label = 'Exp')
+plt.plot(df1['r/R'],df1['c/R'], 's--',label = 'Uniform')
+
 plt.grid()
+plt.legend()
 plt.show()
+# %%
