@@ -6,7 +6,9 @@ from blade_design import process_file, airfoil_path
 def bemt(rotor:pd.DataFrame, airfoil_name:str, iter:int = 100, tol:float = 1e-3):
     # Read  airfoil data
     c_lift_drag = process_file(airfoil_path.joinpath(f'{airfoil_name}_c_drg.txt'))
-
+    cols = c_lift_drag.columns
+    idre = np.argmax([float(col.split()[-1]) for col in cols])
+    re = cols[idre]    
     
     # Step 1 - Initialize the BEMT parameters
     a = a_line = np.zeros(len(rotor['x']))
@@ -25,7 +27,7 @@ def bemt(rotor:pd.DataFrame, airfoil_name:str, iter:int = 100, tol:float = 1e-3)
         # Step 3 - Compute local angle of attack
         alpha = phi - np.deg2rad(rotor['theta'])
         
-        #  Step 4 - Compute local lift and drag coefficients
+        # Step 4 - Compute local lift and drag coefficients
         
         # Step 5 - Compute local Cn and Ct
         
