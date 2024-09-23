@@ -3,7 +3,10 @@ import pandas as pd
 
 from blade_design import process_file, airfoil_path
 
-def bemt(rotor:pd.DataFrame, airfoil_name:str, iter:int = 100, tol:float = 1e-3):
+def coefficients_extrapolation(df_coeff:pd.DataFrame, rotor:pd.DataFrame) -> pd.DataFrame:
+    pass
+
+def bemt(rotor:pd.DataFrame, airfoil_name:str, threeD_correction: bool = False, iter:int = 100, tol:float = 1e-3):
     # Read  airfoil data
     c_lift_drag = process_file(airfoil_path.joinpath(f'{airfoil_name}_c_drg.txt'))
     cols = c_lift_drag.columns
