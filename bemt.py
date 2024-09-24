@@ -32,6 +32,9 @@ def bemt(rotor:pd.DataFrame, airfoil_name:str, threeD_correction: bool = False, 
     # Extrapolation of  coefficients for large angles of attack
     re = max(c_lift_drag, key = lambda x: float(x.split()[-1])) # get the greater reynolds number case
     coeff_extra = coefficients_extrapolation(c_lift_drag[re][0])
+    Cl_inter = interp1d(np.deg2rad(coeff_extra['alpha']),  coeff_extra['Cl'], kind='cubic')
+    Cd_inter = interp1d(np.deg2rad(coeff_extra['alpha']),  coeff_extra['Cd'], kind='cubic')
+
     
     # Step 1 - Initialize the BEMT parameters
     a = a_line = np.zeros(len(rotor['x']))
@@ -51,6 +54,7 @@ def bemt(rotor:pd.DataFrame, airfoil_name:str, threeD_correction: bool = False, 
         alpha = phi - np.deg2rad(rotor['theta'])
         
         # Step 4 - Compute local lift and drag coefficients
+        
         
         # Step 5 - Compute local Cn and Ct
         
