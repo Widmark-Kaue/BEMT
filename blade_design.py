@@ -36,14 +36,14 @@ def process_file(file_path) -> pd.DataFrame:
     
     return df
 
-def tip_correction(x:np.ndarray, phi:np.ndarray, tip_speed_ratio:float, number_of_blades:int, model:str = '') -> np.ndarray:
+def tip_correction(phi:np.ndarray, R_r:np.ndarray, number_of_blades:int, model:str = '') -> np.ndarray:
     match model:
         case 'Prandtl':
             # Tip Prandtl's correction function
-            f = number_of_blades/2/np.sin(phi) * (tip_speed_ratio/x - 1)
+            f = number_of_blades/2/np.sin(phi) * (R_r - 1)
             F = 2/np.pi * np.arccos(np.exp(-f))
         case _:
-            F = np.ones(len(x))
+            F = np.ones(len(R_r))
     
     return F
               
@@ -177,7 +177,7 @@ def blade_design(
     B = number_of_blades          
     phi_rad = np.deg2rad(phi[locs])
 
-    F = tip_correction( x[locs], phi_rad, tip_speed_ratio, number_of_blades, model = tip_correction_model)
+    F = tip_correction(phi_rad, tip_speed_ratio/x[locs], number_of_blades, model = tip_correction_model)
 
     # Tangential force coefficient
     Ct = line_max_re['cl_opt']*np.sin(phi_rad) - line_max_re['cd_opt']*np.cos(phi_rad)
