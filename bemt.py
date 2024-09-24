@@ -1,17 +1,37 @@
 import numpy as np
 import pandas as pd
 
+from scipy.interpolate import interp1d
 from blade_design import process_file, airfoil_path
 
-def coefficients_extrapolation(df_coeff:pd.DataFrame, rotor:pd.DataFrame) -> pd.DataFrame:
-    pass
+def coefficients_extrapolation(df_coeff:pd.DataFrame, smooth:bool = False) -> pd.DataFrame:
+    # Model for Large Angle of Attacks - From modified Hoerner flat plat coefficients
+    alpha_extra_pos = np.linspace(25, 180, 200)
+    alpha_extra_neg = np.linspace(-180, -25, 200)
+    
+    Cl_extra_pos =  np.sin(2*np.deg2rad(alpha_extra_pos))
+    Cl_extra_neg =  np.sin(2*np.deg2rad(alpha_extra_neg))
+    
+    Cd_extra_pos =  1.3*np.sin(np.deg2rad(alpha_extra_pos))**2
+    Cd_extra_neg =  1.3*np.sin(np.deg2rad(alpha_extra_neg))**2
+    
+    df_extra = pd.DataFrame(
+        {
+            'alpha': np.concatenate((alpha_extra_neg, df_coeff[:,0] , alpha_extra_pos)),
+            'Cl':  np.concatenate((Cl_extra_neg, df_coeff[:,1], Cl_extra_pos)),
+            'Cd':  np.concatenate((Cd_extra_neg, df_coeff[:,2], Cd_extra_pos))
 
-def bemt(rotor:pd.DataFrame, airfoil_name:str, threeD_correction: bool = False, iter:int = 100, tol:float = 1e-3):
+        }
+    )    
+    return  df_extra
+
+def bemt(rotor:pd.DataFrame, airfoil_name:str, threeD_correction: bool = False, tip_correction:str = '', iter:int = 100, tol:float = 1e-3):
     # Read  airfoil data
     c_lift_drag = process_file(airfoil_path.joinpath(f'{airfoil_name}_c_drg.txt'))
-    cols = c_lift_drag.columns
-    idre = np.argmax([float(col.split()[-1]) for col in cols])
-    re = cols[idre]    
+   
+    # Extrapolation of  coefficients for large angles of attack
+    re = max(c_lift_drag, key = lambda x: float(x.split()[-1])) # get the greater reynolds number case
+    coeff_extra = coefficients_extrapolation(c_lift_drag[re][0])
     
     # Step 1 - Initialize the BEMT parameters
     a = a_line = np.zeros(len(rotor['x']))
