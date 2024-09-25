@@ -54,6 +54,7 @@ def blade_design(
     number_of_blades:int, 
     number_of_sections:int = 50, 
     section_distribution:str = 'uniform',
+    coef_distribution:int = 5, 
     tip_correction_model:str = 'Prandtl',
     plot:bool = True
     ) -> pd.DataFrame:
@@ -123,7 +124,7 @@ def blade_design(
 
     # axial induction factor
     x0 = 0.26
-    xf = 0.3333
+    xf = np.round(1/3, 6)
     points = np.linspace(0, 1, number_of_sections)
     
     if section_distribution.lower() == 'uniform':
@@ -131,8 +132,9 @@ def blade_design(
     elif section_distribution.lower() == 'sine':
         a = 0.5*(1 + np.cos(np.pi * points)) * (xf - x0) + x0
     elif section_distribution.lower() == 'exp':
-        k = 5
+        k = coef_distribution
         a = (1 - np.exp(-k * points))  * (xf - x0) + x0
+        # if a[-1] < xf: a = np.insert(a, -1, xf)
 
 
     # tangential induction factor
@@ -185,7 +187,7 @@ def blade_design(
     # Solidity
     sigma = 4*x[locs]*a_line[locs] * np.sin(phi_rad)**2/(1 - a[locs])/Ct
 
-    # Chord Distributio
+    # Chord Distribution
     c_R = 2*np.pi*sigma*x[locs]/(B*tip_speed_ratio)
     
     ### Filter and Save data in dataframe
