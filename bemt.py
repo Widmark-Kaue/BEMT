@@ -2,8 +2,8 @@ import numpy as np
 import pandas as pd
 
 from scipy.interpolate import interp1d
-from scipy.optimize import bisect
-from blade_design import process_file, airfoil_path, tip_correction
+from scipy.optimize import bisect, root
+from blade_design import process_file, airfoil_path, tip_correction, blade_design
 
 def coefficients_extrapolation(df_coeff:pd.DataFrame, smooth:bool = False) -> pd.DataFrame:
     # Model for Large Angle of Attacks - From modified Hoerner flat plat coefficients
@@ -26,7 +26,7 @@ def coefficients_extrapolation(df_coeff:pd.DataFrame, smooth:bool = False) -> pd
     )    
     return  df_extra
 
-def bemt(rotor:pd.DataFrame, airfoil_name:str, threeD_correction: bool = False, tip_correction_model:str = '', iter:int = 100, tol:float = 1e-3):
+def bemt(rotor:pd.DataFrame, airfoil_name:str, number_of_blades: int, threeD_correction: bool = False, tip_correction_model:str = '', iter:int = 100, tol:float = 1e-3):
     # Read  airfoil data
     c_lift_drag = process_file(airfoil_path.joinpath(f'{airfoil_name}_c_drg.txt'))
    
@@ -44,17 +44,18 @@ def bemt(rotor:pd.DataFrame, airfoil_name:str, threeD_correction: bool = False, 
     alpha = np.zeros(len(rotor['x']))
     Ct = np.zeros(len(rotor['x']))
     Cn = np.zeros(len(rotor['x']))
+    error = []
     
     
     for i in range(iter):
         # Step 2 - Compute flow angle
-        phi = np.arctan((1-a)/(1+a_line)/rotor['x'])
+        phi = np.arctan((1-a)/(1+a_line)/rotor['x'].to_numpy())
         
         # Step 2.5 - Tip Correction
-        F = tip_correction(rotor['x'], phi, model= tip_correction_model)
+        F = tip_correction(phi, rotor['x'].to_numpy()[-1]/rotor['x'],number_of_blades, model= tip_correction_model)
         
         # Step 3 - Compute local angle of attack
-        alpha = phi - np.deg2rad(rotor['theta'])
+        alpha = phi - np.deg2rad(rotor['theta'].to_numpy())
         
         # Step 4 - Compute local lift and drag coefficients
         Cl = Cl_interp(alpha)
@@ -66,16 +67,23 @@ def bemt(rotor:pd.DataFrame, airfoil_name:str, threeD_correction: bool = False, 
         
         # Step 6 - Update induction factors
         if min(a) <= 1/3:
-            a_new = 1/((4*F * np.sin(phi)**2/(rotor['sigma'] * Cn)) + 1)
-            a_line_new = 1/((4*F * np.sin(phi)* np.cos(phi)/(rotor['sigma'] * Cn)) - 1)
+            a_new = 1/((4*F * np.sin(phi)**2/(rotor['sigma'].to_numpy() * Cn)) + 1)
+            a_line_new = 1/((4*F * np.sin(phi)* np.cos(phi)/(rotor['sigma'].to_numpy() * Cn)) - 1)
         else:
-            K = rotor['sigma']*Cn/(np.sin(phi)**2)
+            K = rotor['sigma'].to_numpy()*Cn/(np.sin(phi)**2)
             func = lambda a: -K + a*(1+ 4*F + 2*K) - a**2*(5*F + K)+3*F*a**3
-            a_new = bisect(func, 1/3, 1)
+            a_new = root(func, 1/3*np.ones(len(a)))
             a_line_new = (1 - 3*a)/(4*a - 1)
         
         #  Step 7 - Check convergence: Root Mean Square Error
-        if np.sqrt(np.sum((a_new - a)**2)/len(a)) < tol:
+        error.append(np.sqrt(np.sum((a_new - a)**2)/len(a)))
+        if error[-1] < tol:
             break
-         
-     
+        else:
+            a = a_new
+            a_line = a_line_new
+
+if __name__ == '__main__':
+    airfoil_name = 's834'
+    rotor = blade_design('s834', 10, 2, number_of_sections=300,plot=False)
+    bemt(rotor, airfoil_name, 2)
