@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 
 from scipy.interpolate import interp1d
-from scipy.optimize import bisect, root
+from scipy.optimize import root
 from blade_design import process_file, airfoil_path, tip_correction, blade_design
 
 def coefficients_extrapolation(df_coeff:pd.DataFrame, smooth:bool = False) -> pd.DataFrame:
@@ -26,7 +26,8 @@ def coefficients_extrapolation(df_coeff:pd.DataFrame, smooth:bool = False) -> pd
     )    
     return  df_extra
 
-def bemt(rotor:pd.DataFrame, airfoil_name:str, number_of_blades: int, threeD_correction: bool = False, tip_correction_model:str = '', iter:int = 100, tol:float = 1e-3):
+def bemt(TSR:np.ndarray, rotor:pd.DataFrame, airfoil_name:str, number_of_blades: int, threeD_correction: bool = False, tip_correction_model:str = 'Prandtl', iter:int = 100, tol:float = 1e-3):
+    
     # Read  airfoil data
     c_lift_drag = process_file(airfoil_path.joinpath(f'{airfoil_name}_c_drg.txt'))
    
@@ -36,9 +37,13 @@ def bemt(rotor:pd.DataFrame, airfoil_name:str, number_of_blades: int, threeD_cor
     Cl_interp = interp1d(np.deg2rad(coeff_extra['alpha']),  coeff_extra['Cl'], kind='cubic')
     Cd_interp = interp1d(np.deg2rad(coeff_extra['alpha']),  coeff_extra['Cd'], kind='cubic')
 
+    
+    
     # Step 1 - Initialize the BEMT parameters
-    a = a_line = np.zeros(len(rotor['x']))
-    a_new = a_line_new = np.zeros(len(rotor['x']))
+    a =  np.zeros(len(rotor['x']))
+    a_line = np.zeros(len(rotor['x']))
+    a_new =  np.zeros(len(rotor['x']))
+    a_line_new = np.zeros(len(rotor['x']))
     
     phi = np.zeros(len(rotor['x']))
     alpha = np.zeros(len(rotor['x']))
@@ -52,7 +57,7 @@ def bemt(rotor:pd.DataFrame, airfoil_name:str, number_of_blades: int, threeD_cor
         phi = np.arctan((1-a)/(1+a_line)/rotor['x'].to_numpy())
         
         # Step 2.5 - Tip Correction
-        F = tip_correction(phi, rotor['x'].to_numpy()[-1]/rotor['x'],number_of_blades, model= tip_correction_model)
+        F = tip_correction(phi, rotor['x'].to_numpy()[-1]/rotor['x'].to_numpy(),number_of_blades, model= tip_correction_model)
         
         # Step 3 - Compute local angle of attack
         alpha = phi - np.deg2rad(rotor['theta'].to_numpy())
@@ -85,5 +90,5 @@ def bemt(rotor:pd.DataFrame, airfoil_name:str, number_of_blades: int, threeD_cor
 
 if __name__ == '__main__':
     airfoil_name = 's834'
-    rotor = blade_design('s834', 10, 2, number_of_sections=300,plot=False)
+    rotor = blade_design('s834', 7, 2, number_of_sections=280,plot=False)
     bemt(rotor, airfoil_name, 2)

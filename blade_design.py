@@ -3,6 +3,7 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
+from scipy.optimize import root
 from matplotlib.colors import BASE_COLORS
 from pathlib import Path
 
@@ -53,8 +54,8 @@ def blade_design(
     tip_speed_ratio:float, 
     number_of_blades:int, 
     number_of_sections:int = 50, 
-    section_distribution:str = 'uniform',
-    coef_distribution:int = 5, 
+    # section_distribution:str = 'uniform',
+    # coef_distribution:int = 5, 
     tip_correction_model:str = 'Prandtl',
     plot:bool = True
     ) -> pd.DataFrame:
@@ -122,28 +123,24 @@ def blade_design(
 
     alpha_opt = line_max_re['alpha_opt']
 
-    # axial induction factor
-    x0 = 0.26
-    xf = np.round(1/3, 6)
-    points = np.linspace(0, 1, number_of_sections)
-    
-    if section_distribution.lower() == 'uniform':
-        a = points *(xf - x0) + x0    
-    elif section_distribution.lower() == 'sine':
-        a = 0.5*(1 + np.cos(np.pi * points)) * (xf - x0) + x0
-    elif section_distribution.lower() == 'exp':
-        k = coef_distribution
-        a = (1 - np.exp(-k * points))  * (xf - x0) + x0
-        # if a[-1] < xf: a = np.insert(a, -1, xf)
+    # local rotational speed ratio
+    # num = a*( 1 - a)
+    # den = a_line*(1 + a_line)
+    x = np.linspace(0.073, tip_speed_ratio, number_of_sections)
 
+    # axial induction factor
+    a_line_func = lambda a : (1 - 3*a)/(4*a - 1)
+    a_root = lambda a: a*(1 - a) - x**2 * a_line_func(a)* (1 + a_line_func(a))
+    sol = root(a_root, 0.26 * np.ones(len(x)))
+    a = sol.x
+    
+    # if np.any(a > 1/3):
+    #     recs = a[a > 1/3]
+    #     for rec in recs:
+            
 
     # tangential induction factor
     a_line = (1 - 3 *a)/(4*a - 1)
-
-    # local rotational speed ratio
-    num = a*( 1 - a)
-    den = a_line*(1 + a_line)
-    x = np.sqrt(num/den)
 
     # Flow angle
     phi = np.rad2deg(np.arctan((1 - a)/(1 + a_line)/x))
@@ -218,14 +215,14 @@ def blade_design(
 #%% Example
 
 if __name__ ==  "__main__":
-    df1 = blade_design('s834', 7, 2, number_of_sections=20,plot=False)
-    df2 = blade_design('s834', 7, 2, number_of_sections=20, section_distribution='sine', plot=False)
-    df3 = blade_design('s834', 7, 2, number_of_sections=20, section_distribution='exp', plot=False)
+    df1 = blade_design('s834', 7, 2, plot=True)
+    # df2 = blade_design('s834', 7, 2, number_of_sections=20, section_distribution='sine', plot=False)
+    # df3 = blade_design('s834', 7, 2, number_of_sections=20, section_distribution='exp', plot=False)
 
     # Comparison between each distribution type
-    plt.plot(df2['r/R'],df2['c/R'], '^--',label = 'Sine')
-    plt.plot(df3['r/R'],df3['c/R'], 'o--',label = 'Exp')
-    plt.plot(df1['r/R'],df1['c/R'], 's--',label = 'Uniform')
+    # plt.plot(df2['r/R'],df2['c/R'], '^--',label = 'Sine')
+    # plt.plot(df3['r/R'],df3['c/R'], 'o--',label = 'Exp')
+    # plt.plot(df1['r/R'],df1['c/R'], 's--',label = 'Uniform')
 
     plt.grid()
     plt.legend()
