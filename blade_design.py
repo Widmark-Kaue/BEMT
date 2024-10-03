@@ -54,8 +54,6 @@ def blade_design(
     tip_speed_ratio:float, 
     number_of_blades:int, 
     number_of_sections:int = 50, 
-    # section_distribution:str = 'uniform',
-    # coef_distribution:int = 5, 
     tip_correction_model:str = 'Prandtl',
     plot:bool = True
     ) -> pd.DataFrame:
@@ -131,12 +129,16 @@ def blade_design(
     # axial induction factor
     a_line_func = lambda a : (1 - 3*a)/(4*a - 1)
     a_root = lambda a: a*(1 - a) - x**2 * a_line_func(a)* (1 + a_line_func(a))
-    sol = root(a_root, 0.26 * np.ones(len(x)))
+    sol = root(lambda a: a_root(a), 0.26 * np.ones(len(x)), method = 'lm')
     a = sol.x
     
+    assert np.any(a < 1/3), 'No valid point finded to axial induction factor'    
     # if np.any(a > 1/3):
-    #     recs = a[a > 1/3]
-    #     for rec in recs:
+    #     rec_pos = a > 1/3
+    #     x_rec = x[rec_pos]
+    #     for i, rec in enumerate(a[rec_pos]):
+    #         sol = root_scalar(lambda a: a_root(a, x_rec[i]),  bracket=[0.26, 1/3], method='bisect')
+    #         a[rec_pos][i] = sol.root
             
 
     # tangential induction factor
@@ -158,12 +160,10 @@ def blade_design(
         } )
 
     # Plotting
-    locs = df_sections['r/R'] <= 1 #valid points
-    
     fig, (ax1, ax2) = plt.subplots(2, 1, figsize=[10, 8])
     
-    ax1.plot(x[locs]/tip_speed_ratio, theta_opt[locs],'k', label = 'Optimun pitch angle')
-    ax1.plot(x[locs]/tip_speed_ratio, phi[locs], 'k--', label = 'Flow angle')
+    ax1.plot(x/tip_speed_ratio, theta_opt,'k', label = 'Optimun pitch angle')
+    ax1.plot(x/tip_speed_ratio, phi, 'k--', label = 'Flow angle')
 
     ax1.set_title('Pitch and Flow Angle')
     # ax1.set_xlabel('r/R')
@@ -174,30 +174,28 @@ def blade_design(
         
     ### Chord Distribution
     B = number_of_blades          
-    phi_rad = np.deg2rad(phi[locs])
+    phi_rad = np.deg2rad(phi)
 
-    F = tip_correction(phi_rad, tip_speed_ratio/x[locs], number_of_blades, model = tip_correction_model)
+    F = tip_correction(phi_rad, tip_speed_ratio/x, number_of_blades, model = tip_correction_model)
 
     # Tangential force coefficient
     Ct = line_max_re['cl_opt']*np.sin(phi_rad) - line_max_re['cd_opt']*np.cos(phi_rad)
 
     # Solidity
-    sigma = 4*x[locs]*a_line[locs] * np.sin(phi_rad)**2/(1 - a[locs])/Ct
+    sigma = 4*x*a_line * np.sin(phi_rad)**2/(1 - a)/Ct
 
     # Chord Distribution
-    c_R = 2*np.pi*sigma*x[locs]/(B*tip_speed_ratio)
+    c_R = 2*np.pi*sigma*x/(B*tip_speed_ratio)
     
-    ### Filter and Save data in dataframe
-    df_sections = df_sections[df_sections['r/R'] <= 1]
     
     df_sections['sigma'] = sigma
     df_sections['c/R'] = c_R
     df_sections['Ct'] = Ct
     df_sections['Tip Correction'] = F
         
-    ax2.plot(x[locs]/tip_speed_ratio, c_R, 'ks-',  label = 'Without Tip Correction')
+    ax2.plot(x/tip_speed_ratio, c_R, 'ks-',  label = 'Without Tip Correction')
 
-    ax2.plot(x[locs]/tip_speed_ratio, c_R*F, 'ko--', label = 'With Tip Correction')
+    ax2.plot(x/tip_speed_ratio, c_R*F, 'ko--', label = 'With Tip Correction')
 
     ax2.set_title('Chord Distribution')
     ax2.set_xlabel(r'$r/R$')
@@ -224,7 +222,7 @@ if __name__ ==  "__main__":
     # plt.plot(df3['r/R'],df3['c/R'], 'o--',label = 'Exp')
     # plt.plot(df1['r/R'],df1['c/R'], 's--',label = 'Uniform')
 
-    plt.grid()
-    plt.legend()
-    plt.show()
+    # plt.grid()
+    # plt.legend()
+    # plt.show()
 # %%
