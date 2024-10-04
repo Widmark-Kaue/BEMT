@@ -5,49 +5,7 @@ import matplotlib.pyplot as plt
 
 from scipy.optimize import root
 from matplotlib.colors import BASE_COLORS
-from pathlib import Path
-
-#%% Colors
-colors = list(BASE_COLORS.keys())
-
-#%% Paths
-image_path = Path('images')
-image_path.mkdir(exist_ok=True)
-
-airfoil_path = Path('airfoil')
-#%% functions
-def process_file(file_path) -> pd.DataFrame:
-    save_data = False
-    df = pd.DataFrame()
-    with open(file_path, 'r') as file:
-        lines = file.readlines()
-        i = 0
-        for line in lines:
-            if 'Average Reynolds #' in line:
-                reynolds  = float(lines[i+1])
-            
-            if 'Number of angles of attack:' in line:
-                number_of_aoa = int(lines[i+1])
-            
-            if 'alpha' in line:
-                data = np.array([[float(a.split()[0]), float(a.split()[1]), float(a.split()[2])] for a in lines[i+1: i+1+number_of_aoa]])
-                df[f'Re = {reynolds}'] = [data]
-            
-            i+=1
-    
-    return df
-
-def tip_correction(phi:np.ndarray, R_r:np.ndarray, number_of_blades:int, model:str = '') -> np.ndarray:
-    match model:
-        case 'Prandtl':
-            # Tip Prandtl's correction function
-            f = number_of_blades/2/np.sin(phi) * (R_r - 1)
-            F = 2/np.pi * np.arccos(np.exp(-f))
-        case _:
-            F = np.ones(len(R_r))
-    
-    return F
-              
+from utils import *
 
 def blade_design(
     airfoil_name:str, 
@@ -57,6 +15,7 @@ def blade_design(
     tip_correction_model:str = 'Prandtl',
     plot:bool = True
     ) -> pd.DataFrame:
+    
     
     #Load airfoil points
     x, y = np.loadtxt(airfoil_path.joinpath(f'{airfoil_name}.dat'), skiprows=1, unpack=True)
@@ -69,6 +28,9 @@ def blade_design(
     cl_opt  = []
     cd_opt = []
     re = []
+    
+    # Colors for plotting
+    colors = list(BASE_COLORS.keys())
     
     fig, ax = plt.subplots(figsize=[10, 4.8])
     
@@ -122,8 +84,6 @@ def blade_design(
     alpha_opt = line_max_re['alpha_opt']
 
     # local rotational speed ratio
-    # num = a*( 1 - a)
-    # den = a_line*(1 + a_line)
     x = np.linspace(0.073, tip_speed_ratio, number_of_sections)
 
     # axial induction factor
@@ -132,15 +92,8 @@ def blade_design(
     sol = root(lambda a: a_root(a), 0.26 * np.ones(len(x)), method = 'lm')
     a = sol.x
     
-    assert np.any(a < 1/3), 'No valid point finded to axial induction factor'    
-    # if np.any(a > 1/3):
-    #     rec_pos = a > 1/3
-    #     x_rec = x[rec_pos]
-    #     for i, rec in enumerate(a[rec_pos]):
-    #         sol = root_scalar(lambda a: a_root(a, x_rec[i]),  bracket=[0.26, 1/3], method='bisect')
-    #         a[rec_pos][i] = sol.root
+    assert np.all(a < 1/3), 'No valid point finded to axial induction factor'    
             
-
     # tangential induction factor
     a_line = (1 - 3 *a)/(4*a - 1)
 
@@ -214,15 +167,4 @@ def blade_design(
 
 if __name__ ==  "__main__":
     df1 = blade_design('s834', 7, 2, plot=True)
-    # df2 = blade_design('s834', 7, 2, number_of_sections=20, section_distribution='sine', plot=False)
-    # df3 = blade_design('s834', 7, 2, number_of_sections=20, section_distribution='exp', plot=False)
-
-    # Comparison between each distribution type
-    # plt.plot(df2['r/R'],df2['c/R'], '^--',label = 'Sine')
-    # plt.plot(df3['r/R'],df3['c/R'], 'o--',label = 'Exp')
-    # plt.plot(df1['r/R'],df1['c/R'], 's--',label = 'Uniform')
-
-    # plt.grid()
-    # plt.legend()
-    # plt.show()
 # %%

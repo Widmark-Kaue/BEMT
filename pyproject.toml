@@ -13,6 +13,7 @@ ipykernel = "^6.29.5"
 pathlib2 = "^2.3.7.post1"
 scipy = "^1.14.1"
 pandas = "^2.2.2"
+nbformat = ">=4.2.0"
 
 
 [build-system]

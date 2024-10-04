@@ -1,46 +1,29 @@
 import numpy as np
 import pandas as pd
+import matplotlib.pyplot as plt
 
 from scipy.interpolate import interp1d
 from scipy.optimize import root
-from blade_design import process_file, airfoil_path, tip_correction, blade_design
+from blade_design import blade_design
+from utils import *
 
-def coefficients_extrapolation(df_coeff:pd.DataFrame, smooth:bool = False) -> pd.DataFrame:
-    # Model for Large Angle of Attacks - From modified Hoerner flat plat coefficients
-    alpha_extra_pos = np.linspace(25, 180, 200)
-    alpha_extra_neg = np.linspace(-180, -25, 200)
-    
-    Cl_extra_pos =  np.sin(2*np.deg2rad(alpha_extra_pos))
-    Cl_extra_neg =  np.sin(2*np.deg2rad(alpha_extra_neg))
-    
-    Cd_extra_pos =  1.3*np.sin(np.deg2rad(alpha_extra_pos))**2
-    Cd_extra_neg =  1.3*np.sin(np.deg2rad(alpha_extra_neg))**2
-    
-    df_extra = pd.DataFrame(
-        {
-            'alpha': np.concatenate((alpha_extra_neg, df_coeff[:,0] , alpha_extra_pos)),
-            'Cl':  np.concatenate((Cl_extra_neg, df_coeff[:,1], Cl_extra_pos)),
-            'Cd':  np.concatenate((Cd_extra_neg, df_coeff[:,2], Cd_extra_pos))
-
-        }
-    )    
-    return  df_extra
-
-def bemt(TSR:float, rotor:pd.DataFrame, airfoil_name:str, number_of_blades: int, threeD_correction: bool = False, tip_correction_model:str = 'Prandtl', iter:int = 100, tol:float = 1e-3):
+def bemt(TSR:float, rotor:pd.DataFrame, airfoil_name:str, number_of_blades: int, threeD_correction: bool = False, tip_correction_model:str = 'Prandtl', iter:int = 100, tol:float = 1e-3, D: float= 0.05):
     
     # Read  airfoil data
     c_lift_drag = process_file(airfoil_path.joinpath(f'{airfoil_name}_c_drg.txt'))
+    c_lift = process_file(airfoil_path.joinpath(f'{airfoil_name}_c_lft.txt'))
    
     # Extrapolation of  coefficients for large angles of attack
     re = max(c_lift_drag, key = lambda x: float(x.split()[-1])) # get the greater reynolds number case
-    coeff_extra = coefficients_extrapolation(c_lift_drag[re][0])
+    dummy = pd.DataFrame()
+    coeff_extra = coefficients_extrapolation(dummy,c_lift_drag[re][0])
     Cl_interp = interp1d(np.deg2rad(coeff_extra['alpha']),  coeff_extra['Cl'], kind='cubic')
     Cd_interp = interp1d(np.deg2rad(coeff_extra['alpha']),  coeff_extra['Cd'], kind='cubic')
 
     
     # Step 0 - Prepare geometric parameters (Using intermediate points to avoid edge effects)
     r_R = rotor['r/R'].to_numpy()[1:-1]
-    sigma = rotor['sigma'].to_numpy()[1:-1]
+    sigma = rotor['sigma'].to_numpy()[1:-1] * rotor['Tip Correction'].to_numpy()[1:-1]
     theta = np.deg2rad(rotor['theta'].to_numpy()[1:-1])
     x = r_R*TSR                   
 
@@ -102,13 +85,16 @@ def bemt(TSR:float, rotor:pd.DataFrame, airfoil_name:str, number_of_blades: int,
         if error[-1] < tol:
             break
         else:
-            a = a_new.copy()
-            a[a < 0] = 0
-            a_line = a_line_new.copy()
-            a_line[a_line  < 0] = 0
+            a = a + D*(a_new - a)
+            a_line = a_line + D*(a_line_new - a_line)
+            
+            # a[a < 0] = 0
+            # a_line[a_line  < 0] = 0
 
     pass
 if __name__ == '__main__':
     airfoil_name = 's834'
     rotor = blade_design('s834', 7, 2, number_of_sections=50,plot=False)
-    bemt(6, rotor, airfoil_name, 2, iter=500)
+    plt.plot(rotor['r/R'], rotor['a'])
+    plt.show()
+    bemt(7, rotor, airfoil_name, 2, iter=500, D=0.1)
