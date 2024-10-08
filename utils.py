@@ -1,6 +1,8 @@
 import numpy as np
 import pandas as pd
 
+from scipy.interpolate import interp1d
+
 from pathlib import Path
 
 #%% Paths
@@ -41,29 +43,39 @@ def tip_correction(phi:np.ndarray, R_r:np.ndarray, number_of_blades:int, model:s
     
     return F
 
-def coefficients_extrapolation(df_coeff_cl:pd.DataFrame, df_coeff_cd:pd.DataFrame, smooth:bool = False) -> pd.DataFrame:
+def coefficients_extrapolation(Cl_mat:np.ndarray, Cd_mat:np.ndarray, smooth:bool = True, alpha_shift:float = 5, delta_alpha:float =5, delta_alpha_d:float = 0, interpolate_type:str = 'linear') -> pd.DataFrame:
+    
+    #Eliminate duplicates angle of attack values
+    _, idx = np.unique(Cl_mat[:, 1], return_index=True)
+    Cl_mat = Cl_mat[idx, :]
+
+    _, idx = np.unique(Cd_mat[:, 1], return_index=True)
+    Cd_mat = Cd_mat[idx, :]
+    
+    # funcs of experimental data - C._known
+    Cl_known = interp1d(np.deg2rad(Cl_mat[:,1]), Cl_mat[:,0],  kind=interpolate_type, fill_value="extrapolate")
+    Cd_known = interp1d(np.deg2rad(Cd_mat[:,1]), Cd_mat[:,0], kind=interpolate_type, fill_value="extrapolate")
+    
     # Model for Large Angle of Attacks - From modified Hoerner flat plat coefficients
-    alpha_extra_pos = np.linspace(25, 180, 200)
-    alpha_extra_neg = np.linspace(-180, -25, 200)
+    alpha_d_cl = np.deg2rad(Cl_mat[-1,1] + delta_alpha_d)
+    alpha_d_cd = np.deg2rad(Cd_mat[-1,1] + delta_alpha_d)    
     
-    Cl_extra_pos =  np.sin(2*np.deg2rad(alpha_extra_pos))
-    Cl_extra_neg =  np.sin(2*np.deg2rad(alpha_extra_neg))
+    alpha_extra = np.deg2rad(np.linspace(-180, 180, 1000))
     
-    Cd_extra_pos =  1.3*np.sin(np.deg2rad(alpha_extra_pos))**2
-    Cd_extra_neg =  1.3*np.sin(np.deg2rad(alpha_extra_neg))**2
+    Cl_high = lambda alpha: np.sin(2*alpha)
+    Cd_high =  lambda alpha: 1.3*np.sin(alpha)**2
+
     
     if smooth:
-        # alpha_d = max(np.abs([df_coeff_cl['alpha'][0], df_coeff_cl['alpha'])[-1l]])) + 1
-        # alpha_shift = np.deg2rad()
-        # delta_alpha = np.deg2rad(10)
-        # g = lambda alpha: 0.5*(1+np.tanh((alpha_d + alpha_shift  - np.abs(alpha))/delta_alpha))
-        pass
+        g = lambda alpha, alpha_d, alpha_shift = np.deg2rad(alpha_shift), delta_alpha = np.deg2rad(delta_alpha): 0.5*(1+np.tanh((alpha_d + alpha_shift  - np.abs(alpha))/delta_alpha))
+        g_cl = lambda alpha: g(alpha, alpha_d = alpha_d_cl)
+        g_cd = lambda alpha: g(alpha, alpha_d = alpha_d_cd)
     
     df_extra = pd.DataFrame(
         {
-            'alpha': np.concatenate((alpha_extra_neg, df_coeff_cd[:,0] , alpha_extra_pos)),
-            'Cl':  np.concatenate((Cl_extra_neg, df_coeff_cd[:,1], Cl_extra_pos)),
-            'Cd':  np.concatenate((Cd_extra_neg, df_coeff_cd[:,2], Cd_extra_pos))
+            'alpha': alpha_extra,
+            'Cl':  g_cl(alpha_extra) * Cl_known(alpha_extra) + (1 - g_cl(alpha_extra)) * Cl_high(alpha_extra),
+            'Cd':  g_cd(alpha_extra) * Cd_known(alpha_extra) + (1 - g_cd(alpha_extra)) * Cd_high(alpha_extra)
 
         }
     )    
