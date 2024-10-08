@@ -78,14 +78,12 @@ def blade_design(
         'cd_opt': cd_opt,
     })
     
-    #### Flow Angle and Pitch Angle
-    line_max_re = df_opt.loc[df_opt['Re'].idxmax()]
-
-    alpha_opt = line_max_re['alpha_opt']
-
-    # local rotational speed ratio
-    x = np.linspace(0.073, tip_speed_ratio, number_of_sections)
-
+    
+    ### Define stations and local rotational speed ratio
+    r_R = np.linspace(0.11, 1, number_of_sections)
+    x = r_R*tip_speed_ratio
+    
+    ### Induction Factors
     # axial induction factor
     a_line_func = lambda a : (1 - 3*a)/(4*a - 1)
     a_root = lambda a: a*(1 - a) - x**2 * a_line_func(a)* (1 + a_line_func(a))
@@ -96,6 +94,11 @@ def blade_design(
             
     # tangential induction factor
     a_line = (1 - 3 *a)/(4*a - 1)
+    
+    #### Flow Angle and Pitch Angle
+    line_max_re = df_opt.loc[df_opt['Re'].idxmax()]
+
+    alpha_opt = line_max_re['alpha_opt']
 
     # Flow angle
     phi = np.rad2deg(np.arctan((1 - a)/(1 + a_line)/x))
@@ -103,28 +106,6 @@ def blade_design(
     # Pitch angle
     theta_opt = phi - alpha_opt
 
-    df_sections = pd.DataFrame({
-        'a':  a, 
-        'a_line': a_line, 
-        'x': x, 
-        'r/R': x/tip_speed_ratio,  
-        'phi': phi, 
-        'theta': theta_opt
-        } )
-
-    # Plotting
-    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=[10, 8])
-    
-    ax1.plot(x/tip_speed_ratio, theta_opt,'k', label = 'Optimun pitch angle')
-    ax1.plot(x/tip_speed_ratio, phi, 'k--', label = 'Flow angle')
-
-    ax1.set_title('Pitch and Flow Angle')
-    # ax1.set_xlabel('r/R')
-    ax1.set_ylabel(r'$\theta$, $\phi$ [deg]')
-
-    ax1.grid()
-    ax1.legend()
-        
     ### Chord Distribution
     B = number_of_blades          
     phi_rad = np.deg2rad(phi)
@@ -140,12 +121,34 @@ def blade_design(
     # Chord Distribution
     c_R = 2*np.pi*sigma*x/(B*tip_speed_ratio)
     
-    
-    df_sections['sigma'] = sigma
-    df_sections['c/R'] = c_R
-    df_sections['Ct'] = Ct
-    df_sections['Tip Correction'] = F
+    ### Save rotor parameters only for the sigma <=1 stations    
+    df_sections = pd.DataFrame({
+        'a':  a, 
+        'a_line': a_line, 
+        'x': x, 
+        'r/R': r_R,  
+        'phi': phi, 
+        'theta': theta_opt,
+        'Ct': Ct,
+        'sigma': sigma,
+        'c/R': c_R,
+        'Tip Correction': F
+        } )
         
+    # Plotting
+    fig, (ax1, ax2) = plt.subplots(2, 1, figsize=[10, 8])
+    
+    ax1.plot(x/tip_speed_ratio, theta_opt,'k', label = 'Optimun pitch angle')
+    ax1.plot(x/tip_speed_ratio, phi, 'k--', label = 'Flow angle')
+
+    ax1.set_title('Pitch and Flow Angle')
+    
+    # ax1.set_xlabel('r/R')
+    ax1.set_ylabel(r'$\theta$, $\phi$ [deg]')
+
+    ax1.grid()
+    ax1.legend()
+    
     ax2.plot(x/tip_speed_ratio, c_R, 'ks-',  label = 'Without Tip Correction')
 
     ax2.plot(x/tip_speed_ratio, c_R*F, 'ko--', label = 'With Tip Correction')
@@ -166,5 +169,5 @@ def blade_design(
 #%% Example
 
 if __name__ ==  "__main__":
-    df1 = blade_design('s834', 7, 2, plot=True)
+    df1 = blade_design('s834', 7, 2, plot=False)
 # %%
