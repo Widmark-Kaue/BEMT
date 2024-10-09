@@ -3,6 +3,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 from scipy.interpolate import interp1d
+from scipy.integrate import simpson
 from scipy.optimize import root
 from blade_design import blade_design
 from utils import *
@@ -37,6 +38,7 @@ def bemt(TSR:float, rotor:pd.DataFrame, airfoil_name:str, number_of_blades: int,
     
     # Step 0 - Prepare geometric parameters (Using intermediate points to avoid edge effects)
     r_R = rotor['r/R'].to_numpy()[1:-1]
+    c_R = rotor['c/R'].to_numpy()[1:-1]
     sigma = rotor['sigma'].to_numpy()[1:-1] * rotor['Tip Correction'].to_numpy()[1:-1]
     theta = np.deg2rad(rotor['theta'].to_numpy()[1:-1])
     x = r_R*TSR                   
@@ -119,7 +121,19 @@ def bemt(TSR:float, rotor:pd.DataFrame, airfoil_name:str, number_of_blades: int,
             a_line_new = np.zeros(len(x))
 
     # Step 8 - Compute local thrust and power
+    dC_T = 4 * np.pi * sigma**2 * Cn /(c_R * number_of_blades * TSR)
+    dC_P = 4 * np.pi * sigma**2 * Ct * x/(c_R * number_of_blades * TSR)
+    
+    # Include boundary conditions
+    dC_T = np.concatenate(([0], dC_T, [0]))
+    dC_P = np.concatenate(([0], dC_P, [0]))
+    
     # Step 9 - Compute total thrust and power
+    x_full = rotor['r/R'].to_numpy()*TSR
+    C_T = simpson(dC_T, x = x_full)
+    C_P = simpson(dC_P, x = x_full)
+ 
+    
     pass
 if __name__ == '__main__':
     airfoil_name = 's834'
