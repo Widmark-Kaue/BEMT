@@ -138,6 +138,4 @@ def bemt(TSR:float, rotor:pd.DataFrame, airfoil_name:str, number_of_blades: int,
 if __name__ == '__main__':
     airfoil_name = 's834'
     rotor = blade_design('s834', 7, 2, number_of_sections=50,plot=False)
-    # plt.plot(rotor['r/R'], rotor['c/R'])
-    # plt.show()
     bemt(7, rotor, airfoil_name, 2, iter=500, D=0.1, tol=1e-6)
