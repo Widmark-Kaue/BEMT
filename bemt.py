@@ -1,15 +1,26 @@
 import numpy as np
-import pandas as pd
-import matplotlib.pyplot as plt
 
 from scipy.interpolate import interp1d
 from scipy.integrate import simpson
 from scipy.optimize import root
-from blade_design import blade_design
 from rotor import Rotor
 from utils import *
 
-def bemt(rotor: Rotor,TSR:float, threeD_correction: bool = False, tip_correction_model:str = 'Prandtl', iter:int = 100, tol:float = 1e-3, D: float= 0.05):
+from dataclasses import dataclass
+
+@dataclass
+class BEMTResult:
+    rotor: Rotor
+    TSR: float
+    C_P: float
+    C_T: float
+    dC_P: np.ndarray
+    dC_T: np.ndarray
+    iterations:int
+    converged:bool
+    error:np.ndarray
+
+def bemt(rotor: Rotor,TSR:float, threeD_correction: bool = False, tip_correction_model:str = 'Prandtl', iter:int = 100, tol:float = 1e-3) -> BEMTResult:
     
     if rotor.airfoil_name is not None:
         # Read  airfoil data
@@ -44,8 +55,8 @@ def bemt(rotor: Rotor,TSR:float, threeD_correction: bool = False, tip_correction
     # Step 0 - Prepare geometric parameters (Using intermediate points to avoid edge effects)
     r_R = rotor.sections['r_R'].to_numpy()[1:-1]
     c_R = rotor.sections['c_R'].to_numpy()[1:-1]
-    sigma = rotor.sections['sigma'].to_numpy()[1:-1] * rotor.sections['Tip Correction'].to_numpy()[1:-1]
-    theta = np.deg2rad(rotor.sections['theta'].to_numpy()[1:-1])
+    sigma = rotor.sections['sigma'].to_numpy()[1:-1] * rotor.sections['tip_correction'].to_numpy()[1:-1]
+    theta = np.deg2rad(rotor.sections['theta_opt'].to_numpy()[1:-1])
     x = r_R*TSR                   
 
     # Step 1 - Initialize the BEMT parameters
@@ -60,7 +71,7 @@ def bemt(rotor: Rotor,TSR:float, threeD_correction: bool = False, tip_correction
     Cn = np.zeros(len(x))
 
     error = []
-    
+    converged = False
     for i in range(iter):
         # Step 2 - Compute flow angle
         phi = np.arctan((1-a)/(1+a_line)/x)
@@ -90,20 +101,16 @@ def bemt(rotor: Rotor,TSR:float, threeD_correction: bool = False, tip_correction
             locs_root = a > 1/3
             
             a_new[locs] = 1/((4*F[locs] * np.sin(phi[locs])**2/(sigma[locs] * Cn[locs])) + 1)
-            # a_line_new[locs] = 1/((4*F[locs] * np.sin(phi[locs])* np.cos(phi[locs])/(sigma[locs] * Ct[locs])) - 1)
             
             # Glauert Correction for high values of a
             term1 = lambda a: (1 - a)**2 * sigma[locs_root]*Cn[locs_root]/(4*F[locs_root]*np.sin(phi[locs_root])**2)
             term2 = lambda a: a*(1 - 1/4 * (5 - 3*a)*a)
             func = lambda a: term1(a) - term2(a)
             
-            # K = sigma[locs_root]*Cn[locs_root]/(np.sin(phi[locs_root])**2)
-            # func = lambda a: -K + a*(1+ 4*F[locs_root] + 2*K) - a**2*(5*F[locs_root] + K)+3*F[locs_root]*a**3
             sol = root(func, (2/3)*np.ones(len(a[locs_root])), method = 'lm')
             a_new[locs_root] = sol.x
-            # a_line_new[locs_root] = (1 - 3*a_new[locs_root])/(4*a_new[locs_root] - 1)
         
-        # Update tangential induction factor
+        # Update rotational induction factor
         a_line_new = 4*F*np.sin(phi) *  np.cos(phi)/(sigma * Ct) - 1
         a_line_new = 1/a_line_new
         
@@ -115,6 +122,7 @@ def bemt(rotor: Rotor,TSR:float, threeD_correction: bool = False, tip_correction
         if  np.all(np.array(error[-1])< tol):
             a = a_new.copy()
             a_line = a_line_new.copy()
+            converged = True
             del a_new
             del a_line_new
             break
@@ -132,20 +140,18 @@ def bemt(rotor: Rotor,TSR:float, threeD_correction: bool = False, tip_correction
     # Include boundary conditions
     dC_T = np.concatenate(([0], dC_T, [0]))
     dC_P = np.concatenate(([0], dC_P, [0]))
-    
-    rotor.sections['dC_T'] = dC_T
-    rotor.sections['dC_P'] = dC_P
+
     
     # Step 9 - Compute total thrust and power
-    x_full = rotor['r/R'].to_numpy()*TSR
+    x_full = rotor.sections['r_R'].to_numpy()*TSR
     C_T = simpson(dC_T, x = x_full)
     C_P = simpson(dC_P, x = x_full)
     
-    rotor.C_T = C_T
-    rotor.C_P = C_P
+    results = BEMTResult(rotor, TSR, C_P, C_T, dC_P, dC_T, i, converged, error)
     
-    pass
+    return results
 if __name__ == '__main__':
-    airfoil_name = 's834'
-    rotor = blade_design('s834', 7, 2, number_of_sections=50,plot=False)
-    bemt(7, rotor, airfoil_name, 2, iter=500, D=0.1, tol=1e-6)
+    rotor = Rotor(number_of_blades=2, number_of_sections=50, tip_speed_ratio=7, airfoil_name='s834')
+    rotor.load_airfoil_prop(plot=False)
+    rotor.blade_design(plot=False)
+    bemt(rotor=rotor, TSR=7, iter=500, tol=1e-6)

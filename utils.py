@@ -10,6 +10,7 @@ image_path = Path('images')
 image_path.mkdir(exist_ok=True)
 
 airfoil_path = Path('airfoil')
+validate_path = Path('validate')
 #%% Functions
 def process_file(file_path) -> pd.DataFrame:
     save_data = False

@@ -13,12 +13,24 @@ class Rotor:
     number_of_blades: int
     tip_speed_ratio: float
     number_of_sections: int
+    rotor_name:str = None
     airfoil_name: str = None
     alpha_opt: float = None
     Cl_opt: float = None
     Cd_opt: float = None
     tip_correction_model:str = 'Prandtl'
     sections:pd.DataFrame = field(init = False, default_factory = pd.DataFrame)
+    
+    # A class attribute to count the number of instances
+    _rotor_count: int = field(init=False, default=0, repr=False)
+
+    def __post_init__(self):
+        # Increment the class attribute
+        type(self)._rotor_count += 1
+        
+        # if rotor name is not defined, define it
+        if self.rotor_name is None:
+            self.rotor_name = f'Rotor {self._rotor_count}'
     
     def load_airfoil_prop(self, plot:bool = True):
         assert self.airfoil_name is not None, 'Airfoil name is not defined'
@@ -91,7 +103,7 @@ class Rotor:
         self.Cd_opt = line_max_re['cd_opt']
         
         
-    def blade_design(self, plot:bool = True):
+    def blade_design(self, solidity:str = 'Cn', plot:bool = True):
         ### Define stations and local rotational speed ratio
         r_R = np.linspace(0.11, 1, self.number_of_sections)
         x = r_R*self.tip_speed_ratio
@@ -116,19 +128,23 @@ class Rotor:
         theta_opt = phi - self.alpha_opt
 
         ### Chord Distribution
-        B = self.number_of_blades          
         phi_rad = np.deg2rad(phi)
 
         F = tip_correction(phi_rad, self.tip_speed_ratio/x, self.number_of_blades, model = self.tip_correction_model)
 
-        # Tangential force coefficient
+        # Tangential and normal force coefficient
         Ct = self.Cl_opt*np.sin(phi_rad) - self.Cd_opt*np.cos(phi_rad)
-
+        Cn = self.Cl_opt*np.cos(phi_rad) + self.Cd_opt*np.sin(phi_rad)
+        
         # Solidity
-        sigma = 4*x*a_line * np.sin(phi_rad)**2/(1 - a)/Ct
+        if solidity == 'Cn':
+            sigma = 4*a*np.sin(phi_rad)**2 / (1 - a)/Cn
+        elif solidity == 'Ct':
+            sigma = 4*x*a_line * np.sin(phi_rad)**2/(1 - a)/Ct
+        
 
         # Chord Distribution
-        c_R = 2*np.pi*sigma*x/(B*self.tip_speed_ratio)
+        c_R = 2*np.pi*sigma*x/(self.number_of_blades*self.tip_speed_ratio)
         
             
         # Plotting
@@ -145,9 +161,9 @@ class Rotor:
         ax1.grid()
         ax1.legend()
         
-        ax2.plot(x/self.tip_speed_ratio, c_R, 'ks-',  label = 'Without Tip Correction')
+        ax2.plot(r_R, c_R, 'ks-',  label = 'Without Tip Correction')
 
-        ax2.plot(x/self.tip_speed_ratio, c_R*F, 'ko--', label = 'With Tip Correction')
+        ax2.plot(r_R, c_R*F, 'ko--', label = 'With Tip Correction')
 
         ax2.set_title('Chord Distribution')
         ax2.set_xlabel(r'$r/R$')
@@ -174,11 +190,3 @@ class Rotor:
                 'tip_correction': F
             }
         )
-        
-    @C_T.setter
-    def C_T(self, C_T:float):
-        self.C_T = C_T
-    
-    @C_P.setter
-    def C_P(self, C_P:float):
-        self.C_P = C_P
