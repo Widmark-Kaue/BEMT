@@ -6,7 +6,7 @@ from scipy.optimize import root
 from matplotlib.colors import BASE_COLORS
 from utils import *
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 @dataclass
 class Rotor:
@@ -18,6 +18,7 @@ class Rotor:
     Cl_opt: float = None
     Cd_opt: float = None
     tip_correction_model:str = 'Prandtl'
+    sections:pd.DataFrame = field(init = False, default_factory = pd.DataFrame)
     
     def load_airfoil_prop(self, plot:bool = True):
         assert self.airfoil_name is not None, 'Airfoil name is not defined'
@@ -158,15 +159,26 @@ class Rotor:
             plt.show()
         else:
             plt.close()
-                
-        self.sections.a = a 
-        self.sections.a_line = a_line 
-        self.sections.x = x
-        self.sections.r_R = r_R
-        self.sections.phi = phi
-        self.sections.theta_opt = theta_opt
-        self.sections.Ct = Ct
-        self.sections.sigma = sigma
-        self.sections.c_R = c_R
-        self.sections.tip_correction = F
         
+        self.sections = pd.DataFrame(
+            {
+                'a': a,
+                'a_line': a_line,
+                'x': x,
+                'r_R': r_R,
+                'phi': phi,
+                'theta_opt': theta_opt,
+                'Ct': Ct,
+                'sigma': sigma,
+                'c_R': c_R,
+                'tip_correction': F
+            }
+        )
+        
+    @C_T.setter
+    def C_T(self, C_T:float):
+        self.C_T = C_T
+    
+    @C_P.setter
+    def C_P(self, C_P:float):
+        self.C_P = C_P
