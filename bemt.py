@@ -6,41 +6,46 @@ from scipy.interpolate import interp1d
 from scipy.integrate import simpson
 from scipy.optimize import root
 from blade_design import blade_design
+from rotor import Rotor
 from utils import *
 
-def bemt(TSR:float, rotor:pd.DataFrame, airfoil_name:str, number_of_blades: int, threeD_correction: bool = False, tip_correction_model:str = 'Prandtl', iter:int = 100, tol:float = 1e-3, D: float= 0.05):
+def bemt(rotor: Rotor,TSR:float, threeD_correction: bool = False, tip_correction_model:str = 'Prandtl', iter:int = 100, tol:float = 1e-3, D: float= 0.05):
     
-    # Read  airfoil data
-    c_lift_drag = process_file(airfoil_path.joinpath(f'{airfoil_name}_c_drg.txt'))
-    c_lift = process_file(airfoil_path.joinpath(f'{airfoil_name}_c_lft.txt'))
+    if rotor.airfoil_name is not None:
+        # Read  airfoil data
+        c_lift_drag = process_file(airfoil_path.joinpath(f'{rotor.airfoil_name}_c_drg.txt'))
+        c_lift = process_file(airfoil_path.joinpath(f'{rotor.airfoil_name}_c_lft.txt'))
+        
+        re_drg = list(c_lift_drag.keys())[-1]
+        re_lft = list(c_lift.keys())[-2:]
+
+        Cd = c_lift_drag[re_drg][0][:, 2]
+        alpha_cd = c_lift_drag[re_drg][0][:, 0]
+
+        Cl = np.concatenate([c_lift[re][0][:,1] for re in re_lft])  
+        alpha_cl = np.concatenate([c_lift[re][0][:,0] for re in re_lft])  
+
+        arg = np.argsort(alpha_cl)
+        alpha_cl = np.sort(alpha_cl)
+        Cl = Cl[arg]
+
+        Cl_mat = np.concatenate((Cl.reshape(-1,1), alpha_cl.reshape(-1,1)), axis = 1)
+        Cd_mat = np.concatenate((Cd.reshape(-1,1), alpha_cd.reshape(-1,1)), axis = 1)
     
-    re_drg = list(c_lift_drag.keys())[-1]
-    re_lft = list(c_lift.keys())[-2:]
-
-    Cd = c_lift_drag[re_drg][0][:, 2]
-    alpha_cd = c_lift_drag[re_drg][0][:, 0]
-
-    Cl = np.concatenate([c_lift[re][0][:,1] for re in re_lft])  
-    alpha_cl = np.concatenate([c_lift[re][0][:,0] for re in re_lft])  
-
-    arg = np.argsort(alpha_cl)
-    alpha_cl = np.sort(alpha_cl)
-    Cl = Cl[arg]
-
-    Cl_mat = np.concatenate((Cl.reshape(-1,1), alpha_cl.reshape(-1,1)), axis = 1)
-    Cd_mat = np.concatenate((Cd.reshape(-1,1), alpha_cd.reshape(-1,1)), axis = 1)
-   
-    # Extrapolation of  coefficients for large angles of attack
-    coeff_extra = coefficients_extrapolation(Cl_mat,Cd_mat, alpha_shift=5, interpolate_type='quadratic')
-    Cl_extra = interp1d(coeff_extra['alpha'],  coeff_extra['Cl'])
-    Cd_extra = interp1d(coeff_extra['alpha'],  coeff_extra['Cd'])
-
+        # Extrapolation of  coefficients for large angles of attack
+        coeff_extra = coefficients_extrapolation(Cl_mat,Cd_mat, alpha_shift=5, interpolate_type='quadratic')
+        Cl_extra = interp1d(coeff_extra['alpha'],  coeff_extra['Cl'])
+        Cd_extra = interp1d(coeff_extra['alpha'],  coeff_extra['Cd'])
+    else:
+        Cl_extra = lambda alpha: rotor.Cl_opt
+        Cd_extra = lambda alpha: rotor.Cd_opt
+        
     
     # Step 0 - Prepare geometric parameters (Using intermediate points to avoid edge effects)
-    r_R = rotor['r/R'].to_numpy()[1:-1]
-    c_R = rotor['c/R'].to_numpy()[1:-1]
-    sigma = rotor['sigma'].to_numpy()[1:-1] * rotor['Tip Correction'].to_numpy()[1:-1]
-    theta = np.deg2rad(rotor['theta'].to_numpy()[1:-1])
+    r_R = rotor.sections['r_R'].to_numpy()[1:-1]
+    c_R = rotor.sections['c_R'].to_numpy()[1:-1]
+    sigma = rotor.sections['sigma'].to_numpy()[1:-1] * rotor.sections['Tip Correction'].to_numpy()[1:-1]
+    theta = np.deg2rad(rotor.sections['theta'].to_numpy()[1:-1])
     x = r_R*TSR                   
 
     # Step 1 - Initialize the BEMT parameters
@@ -61,7 +66,7 @@ def bemt(TSR:float, rotor:pd.DataFrame, airfoil_name:str, number_of_blades: int,
         phi = np.arctan((1-a)/(1+a_line)/x)
         
         # Step 2.5 - Tip Correction
-        F = tip_correction(phi,1/r_R, number_of_blades, model= tip_correction_model)
+        F = tip_correction(phi,1/r_R, rotor.number_of_blades, model= tip_correction_model)
         
         # Step 3 - Compute local angle of attack
         alpha = phi - theta 
@@ -121,18 +126,23 @@ def bemt(TSR:float, rotor:pd.DataFrame, airfoil_name:str, number_of_blades: int,
             a_line_new = np.zeros(len(x))
 
     # Step 8 - Compute local thrust and power
-    dC_T = 4 * np.pi * sigma**2 * Cn /(c_R * number_of_blades * TSR)
-    dC_P = 4 * np.pi * sigma**2 * Ct * x/(c_R * number_of_blades * TSR)
+    dC_T = 4 * np.pi * sigma**2 * Cn /(c_R * rotor.number_of_blades * TSR)
+    dC_P = 4 * np.pi * sigma**2 * Ct * x/(c_R * rotor.number_of_blades * TSR)
     
     # Include boundary conditions
     dC_T = np.concatenate(([0], dC_T, [0]))
     dC_P = np.concatenate(([0], dC_P, [0]))
     
+    rotor.sections['dC_T'] = dC_T
+    rotor.sections['dC_P'] = dC_P
+    
     # Step 9 - Compute total thrust and power
     x_full = rotor['r/R'].to_numpy()*TSR
     C_T = simpson(dC_T, x = x_full)
     C_P = simpson(dC_P, x = x_full)
- 
+    
+    rotor.C_T = C_T
+    rotor.C_P = C_P
     
     pass
 if __name__ == '__main__':
