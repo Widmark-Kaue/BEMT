@@ -2,9 +2,9 @@ import numpy as np
 
 from scipy.interpolate import interp1d
 from scipy.integrate import simpson
-from scipy.optimize import root, brentq
-from rotor import Rotor
-from utils import *
+from scipy.optimize import root
+from src.rotor import Rotor
+from src.utils import *
 
 from dataclasses import dataclass, field
 from typing import Iterable, Union

@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 from scipy.optimize import root
 from scipy.integrate import simpson
 from matplotlib.colors import BASE_COLORS
-from utils import *
+from src.utils import *
 
 from dataclasses import dataclass, field
 
