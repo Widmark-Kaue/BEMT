@@ -3,6 +3,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 from scipy.optimize import root
+from scipy.integrate import simpson
 from matplotlib.colors import BASE_COLORS
 from utils import *
 
@@ -13,13 +14,15 @@ class Rotor:
     number_of_blades: int
     tip_speed_ratio: float
     number_of_sections: int
-    rotor_name:str = None
-    airfoil_name: str = None
-    alpha_opt: float = None
-    Cl_opt: float = None
-    Cd_opt: float = None
-    tip_correction_model:str = 'Prandtl'
-    sections:pd.DataFrame = field(init = False, default_factory = pd.DataFrame)
+    airfoil_name: str = field(default=None, repr=False)
+    alpha_opt: float = field(default=None, repr=False)
+    Cl_opt: float = field(default=None, repr=False)
+    Cd_opt: float = field(default=None, repr=False)
+    tip_correction_model:str = field(default='Prandtl')
+    rotor_name:str = field(default=None, repr=False)
+    CP_opt:float = field(init=False, default=None, repr=False)
+    CT_opt:float = field(init=False, default=None, repr=False)
+    sections:pd.DataFrame = field(init = False, default_factory = pd.DataFrame, repr = False)
     
     # A class attribute to count the number of instances
     _rotor_count: int = field(init=False, default=0, repr=False)
@@ -47,10 +50,11 @@ class Rotor:
         cd_opt = []
         re = []
         
-        # Colors for plotting
-        colors = list(BASE_COLORS.keys())
         
-        fig, ax = plt.subplots(figsize=[10, 4.8])
+        if plot:
+            # Colors for plotting
+            colors = list(BASE_COLORS.keys())
+            fig, ax = plt.subplots(figsize=[10, 4.8])
         
         for i, col in enumerate(cols):
             re.append(float(col.split()[-1]))
@@ -63,32 +67,32 @@ class Rotor:
             cl_opt.append(c_lift_drag[col][0][opt_loc, 1])
             cd_opt.append(c_lift_drag[col][0][opt_loc, 2])
             
-            ax.plot(alpha, LD, colors[i], label=f'Re = {re[-1]:.3e},'+ r' $\alpha_{opt} =$'+ f'{alpha_opt[-1]:.1f}°')
-            ax.plot(alpha_opt[-1], max(LD), f'{colors[i]}o')
+            if plot:
+                ax.plot(alpha, LD, colors[i], label=f'Re = {re[-1]:.3e},'+ r' $\alpha_{opt} =$'+ f'{alpha_opt[-1]:.1f}°')
+                ax.plot(alpha_opt[-1], max(LD), f'{colors[i]}o')
 
-        ax.set_title(r'L/D x $\alpha$')
-        ax.set_xlabel(r'$\alpha$ [deg]')
-        ax.set_ylabel('Cl/Cd')
 
-        ax.legend()
-        ax.grid()
-        
-        # Arifoil plot
-        ax_inset = fig.add_axes([0.65, 0.15, 0.25, 0.25])
-        ax_inset.plot(x, y, 'k', label = self.airfoil_name)
-        
-        ax_inset.set_xticks([])
-        ax_inset.set_yticks([])
-        ax_inset.set_xticklabels([])
-        ax_inset.set_yticklabels([])
-        ax_inset.axis('equal')
-        ax_inset.legend()
-        
         if plot:
-            plt.show()
-        else:
-            plt.close()
+            ax.set_title(r'L/D x $\alpha$')
+            ax.set_xlabel(r'$\alpha$ [deg]')
+            ax.set_ylabel('Cl/Cd')
 
+            ax.legend()
+            ax.grid()
+            
+            # Arifoil plot
+            ax_inset = fig.add_axes([0.65, 0.15, 0.25, 0.25])
+            ax_inset.plot(x, y, 'k', label = self.airfoil_name)
+            
+            ax_inset.set_xticks([])
+            ax_inset.set_yticks([])
+            ax_inset.set_xticklabels([])
+            ax_inset.set_yticklabels([])
+            ax_inset.axis('equal')
+            ax_inset.legend()
+        
+            plt.show()
+ 
         df_opt = pd.DataFrame({
             'Re': re,
             'alpha_opt': alpha_opt,
@@ -103,9 +107,9 @@ class Rotor:
         self.Cd_opt = line_max_re['cd_opt']
         
         
-    def blade_design(self, solidity:str = 'Cn', plot:bool = True):
+    def blade_design(self, r_R0:float = 0.3, solidity:str = 'Cn', plot:bool = True):
         ### Define stations and local rotational speed ratio
-        r_R = np.linspace(0.11, 1, self.number_of_sections)
+        r_R = np.linspace(r_R0, 1, self.number_of_sections)
         x = r_R*self.tip_speed_ratio
         
         ### Induction Factors
@@ -142,40 +146,25 @@ class Rotor:
         elif solidity == 'Ct':
             sigma = 4*x*a_line * np.sin(phi_rad)**2/(1 - a)/Ct
         
-
+        if np.any(sigma > 1): 
+            valid_points = sigma < 1
+            sigma = sigma[valid_points]
+            r_R = r_R[valid_points]
+            x = x[valid_points]
+            a = a[valid_points]
+            a_line = a_line[valid_points]
+            phi = phi[valid_points]
+            theta_opt = theta_opt[valid_points]
+            F = F[valid_points]
+            Cn = Cn[valid_points]
+            Ct = Ct[valid_points]
+        
+        self.number_of_sections_useful = len(sigma)
+        
         # Chord Distribution
         c_R = 2*np.pi*sigma*x/(self.number_of_blades*self.tip_speed_ratio)
         
-            
-        # Plotting
-        fig, (ax1, ax2) = plt.subplots(2, 1, figsize=[10, 8])
-        
-        ax1.plot(x/self.tip_speed_ratio, theta_opt,'k', label = 'Optimun pitch angle')
-        ax1.plot(x/self.tip_speed_ratio, phi, 'k--', label = 'Flow angle')
-
-        ax1.set_title('Pitch and Flow Angle')
-        
-        # ax1.set_xlabel('r/R')
-        ax1.set_ylabel(r'$\theta$, $\phi$ [deg]')
-
-        ax1.grid()
-        ax1.legend()
-        
-        ax2.plot(r_R, c_R, 'ks-',  label = 'Without Tip Correction')
-
-        ax2.plot(r_R, c_R*F, 'ko--', label = 'With Tip Correction')
-
-        ax2.set_title('Chord Distribution')
-        ax2.set_xlabel(r'$r/R$')
-        ax2.set_ylabel(r'$c/R$')
-
-        ax2.legend()
-        ax2.grid()
-        if plot:
-            plt.show()
-        else:
-            plt.close()
-        
+        # Save sections        
         self.sections = pd.DataFrame(
             {
                 'a': a,
@@ -190,3 +179,33 @@ class Rotor:
                 'tip_correction': F
             }
         )
+        
+        self.CP_opt = 8/(self.tip_speed_ratio**2) * simpson(a_line*(1 - a)*x**3, x = x)
+        self.CT_opt = simpson(4*a*(1-a)*F, x = x)
+        
+        # Plotting
+        if plot:
+            fig, (ax1, ax2) = plt.subplots(2, 1, figsize=[10, 8])
+            
+            ax1.plot(x/self.tip_speed_ratio, theta_opt,'k', label = 'Optimun pitch angle')
+            ax1.plot(x/self.tip_speed_ratio, phi, 'k--', label = 'Flow angle')
+
+            ax1.set_title('Pitch and Flow Angle')
+            
+            # ax1.set_xlabel('r/R')
+            ax1.set_ylabel(r'$\theta$, $\phi$ [deg]')
+
+            ax1.grid()
+            ax1.legend()
+            
+            ax2.plot(r_R, c_R, 'ks-',  label = 'Without Tip Correction')
+
+            ax2.plot(r_R, c_R*F, 'ko--', label = 'With Tip Correction')
+
+            ax2.set_title('Chord Distribution')
+            ax2.set_xlabel(r'$r/R$')
+            ax2.set_ylabel(r'$c/R$')
+
+            ax2.legend()
+            ax2.grid()
+            plt.show()
