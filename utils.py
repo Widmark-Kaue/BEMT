@@ -58,26 +58,43 @@ def coefficients_extrapolation(Cl_mat:np.ndarray, Cd_mat:np.ndarray, smooth:bool
     Cd_known = interp1d(np.deg2rad(Cd_mat[:,1]), Cd_mat[:,0], kind=interpolate_type, fill_value="extrapolate")
     
     # Model for Large Angle of Attacks - From modified Hoerner flat plat coefficients
-    alpha_d_cl = np.deg2rad(Cl_mat[-1,1] + delta_alpha_d)
-    alpha_d_cd = np.deg2rad(Cd_mat[-1,1] + delta_alpha_d)    
+    alpha_d_cl_pos = np.deg2rad(Cl_mat[-1,1] + delta_alpha_d)
+    alpha_d_cl_neg = np.deg2rad(abs(Cl_mat[0,1]) + delta_alpha_d)
+    
+    alpha_d_cd_pos = np.deg2rad(Cd_mat[-1,1] + delta_alpha_d)    
+    alpha_d_cd_neg = np.deg2rad(abs(Cd_mat[0,1]) + delta_alpha_d)    
     
     alpha_extra = np.deg2rad(np.linspace(-180, 180, 1000))
+    alpha_extra_pos = alpha_extra[alpha_extra >= 0]
+    alpha_extra_neg = alpha_extra[alpha_extra < 0]
     
     Cl_high = lambda alpha: np.sin(2*alpha)
     Cd_high =  lambda alpha: 1.3*np.sin(alpha)**2
 
-    
     if smooth:
         g = lambda alpha, alpha_d, alpha_shift = np.deg2rad(alpha_shift), delta_alpha = np.deg2rad(delta_alpha): 0.5*(1+np.tanh((alpha_d + alpha_shift  - np.abs(alpha))/delta_alpha))
-        g_cl = lambda alpha: g(alpha, alpha_d = alpha_d_cl)
-        g_cd = lambda alpha: g(alpha, alpha_d = alpha_d_cd)
+        
+        g_cl_pos = lambda alpha: g(alpha, alpha_d = alpha_d_cl_pos)
+        g_cl_neg = lambda alpha: g(alpha, alpha_d = alpha_d_cl_neg)
+        
+        g_cd_pos = lambda alpha: g(alpha, alpha_d = alpha_d_cd_pos)
+        g_cd_neg = lambda alpha: g(alpha, alpha_d = alpha_d_cd_neg)
     
     df_extra = pd.DataFrame(
         {
             'alpha': alpha_extra,
-            'Cl':  g_cl(alpha_extra) * Cl_known(alpha_extra) + (1 - g_cl(alpha_extra)) * Cl_high(alpha_extra),
-            'Cd':  g_cd(alpha_extra) * Cd_known(alpha_extra) + (1 - g_cd(alpha_extra)) * Cd_high(alpha_extra)
-
+            'Cl':  np.concatenate(
+                (
+                    g_cl_neg(alpha_extra_neg) * Cl_known(alpha_extra_neg) + (1 - g_cl_neg(alpha_extra_neg)) * Cl_high(alpha_extra_neg),
+                    g_cl_pos(alpha_extra_pos) * Cl_known(alpha_extra_pos) + (1 - g_cl_pos(alpha_extra_pos)) * Cl_high(alpha_extra_pos)
+                )
+                ),
+            'Cd':  np.concatenate(
+                (
+                    g_cd_neg(alpha_extra_neg) * Cd_known(alpha_extra_neg) + (1 - g_cd_neg(alpha_extra_neg)) * Cd_high(alpha_extra_neg),
+                    g_cd_pos(alpha_extra_pos) * Cd_known(alpha_extra_pos) + (1 - g_cd_pos(alpha_extra_pos)) * Cd_high(alpha_extra_pos)
+                )
+                )
         }
     )    
     return  df_extra
