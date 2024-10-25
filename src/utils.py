@@ -9,6 +9,7 @@ image_path = Path('images')
 image_path.mkdir(exist_ok=True)
 
 airfoil_path = Path('airfoil')
+rotor_path = Path('rotor')
 validate_path = Path('validate')
 #%% Functions
 def process_file(file_path) -> pd.DataFrame:
@@ -32,15 +33,24 @@ def process_file(file_path) -> pd.DataFrame:
     
     return df
 
-def tip_correction(phi:np.ndarray, R_r:np.ndarray, number_of_blades:int, model:str = '') -> np.ndarray:
+def tip_hub_correction(phi:np.ndarray, R_r:np.ndarray, number_of_blades:int, model:str = '', rhub_R:float = None) -> np.ndarray:
     match model:
         case 'Prandtl':
             # Tip Prandtl's correction function
             f = number_of_blades/2/np.sin(phi) * (R_r - 1)
-            F = 2/np.pi * np.arccos(np.exp(-f))
+            F_tip = 2/np.pi * np.arccos(np.exp(-f))
         case _:
-            F = np.ones(len(R_r))
+            F_tip = np.ones(len(R_r))
+            
+    if not rhub_R is None:
+        r_R = 1/R_r
+        f = - number_of_blades/2/np.sin(phi) * (r_R * 1/rhub_R - 1)
+        F_hub = 2/np.pi * np.arccos(np.exp(f))
+    else:
+        F_hub = np.ones(len(R_r))
     
+    F = F_tip * F_hub
+
     return F
 
 def coefficients_extrapolation(Cl_mat:np.ndarray, Cd_mat:np.ndarray, smooth:bool = True, alpha_shift:float = 5, delta_alpha:float =5, delta_alpha_d:float = 0, interpolate_type:str = 'linear') -> pd.DataFrame:
@@ -97,3 +107,40 @@ def coefficients_extrapolation(Cl_mat:np.ndarray, Cd_mat:np.ndarray, smooth:bool
         }
     )    
     return  df_extra
+
+def threeD_correction(r_R:np.ndarray, c_R:np.ndarray, a:np.ndarray, Cl_2d:np.ndarray, Cd_2d:np.ndarray, alpha:np.ndarray, phi:np.ndarray, tip_speed_ratio:float, model:str = '') -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+   
+    # Define local variables
+    c_r = c_R/r_R
+    R_r = 1/r_R
+    x = r_R*tip_speed_ratio
+    Cl_inv = 2*np.pi * np.sin(alpha)
+    Cd_inv = 0
+    
+    match model:
+        case 'Snel':
+            f_Cd = 0
+            f_Cl = 3.1*c_r**2
+        case 'Lindenburg':
+            f_Cd_= 0
+            f_Cl_ = 3.1*(x*np.sin(phi)/(1 - a) * c_r)**2
+        case 'Du and Selig':
+            LAMBDA = tip_speed_ratio * np.sin(phi)/(1 - a)
+            
+            exp_cl = R_r/LAMBDA
+            exp_cd = exp_cl/2
+            
+            # Correction factor
+            f_Cl = 1.6*c_r/0.1267 * (1 - c_r**(exp_cl))/(1 + c_r**(exp_cl)) - 1
+            f_Cl = 1/(2*np.pi) * f_Cl
+            
+            f_Cd = 1.6*c_r/0.1267 * (1 - c_r**(exp_cd))/(1 + c_r**(exp_cd)) - 1
+            f_Cd = -  1/(2*np.pi) * f_Cd
+        case _:
+            f_Cd = 0
+            f_Cl = 0
+    
+    Cl_3d = Cl_2d + f_Cl*(Cl_inv - Cl_2d)
+    Cd_3d = Cd_2d + f_Cd*(Cd_inv - Cd_2d)
+    
+    return Cl_3d, Cd_3d
