@@ -14,7 +14,7 @@ class BEMTResult:
     rotor: Rotor
     TSR: Iterable[float]
     tip_correction_model: str
-    threeD_correction: bool
+    threeD_correction_model: str
     def __post_init__(self):
         self.CP = np.zeros(len(self.TSR))
         self.CT = np.zeros(len(self.TSR))
@@ -35,7 +35,15 @@ class BEMTResult:
         self.converged = np.zeros(len(self.TSR))
         self.error = list()
 
-def bemt(rotor: Rotor,TSR:Union[float, Iterable], Cd_null:bool = False, tip_correction_model:str = 'Prandtl', threeD_correction: bool = False, iter:int = 100, tol:float = 1e-3) -> BEMTResult:
+def bemt(
+    rotor: Rotor,
+    TSR:Union[float, Iterable], 
+    Cd_null:bool = False, 
+    tip_correction_model:str = 'Prandtl',
+    hub_correction: bool = False,
+    threeD_correction_model: str = None, 
+    iter:int = 100, 
+    tol:float = 1e-3) -> BEMTResult:
     
     if rotor.airfoil_name is not None:
         # Read  airfoil data
@@ -69,18 +77,22 @@ def bemt(rotor: Rotor,TSR:Union[float, Iterable], Cd_null:bool = False, tip_corr
     
     if Cd_null:
         Cd_extra = lambda alpha: 0
-            
+    
+    rhub_R = None
+    if hub_correction:
+        rhub_R = rotor.sections['r_R'].to_numpy()[0]        
+    
+    if not isinstance(TSR, Iterable):
+        TSR = np.array([TSR])
+        
     # Step 0 - Prepare geometric parameters (Using intermediate points to avoid edge effects)
     r_R = rotor.sections['r_R'].to_numpy()[1:-1]
     c_R = rotor.sections['c_R'].to_numpy()[1:-1] * rotor.sections['tip_correction'].to_numpy()[1:-1]
     sigma = rotor.sections['sigma'].to_numpy()[1:-1] * rotor.sections['tip_correction'].to_numpy()[1:-1]
     theta = np.deg2rad(rotor.sections['theta_opt'].to_numpy()[1:-1])
-    
-    if not isinstance(TSR, Iterable):
-        TSR = np.array([TSR])
-        
+
     # Step 0.5 - Prepare BEMT parameters
-    results = BEMTResult(rotor = rotor, TSR = TSR, tip_correction_model=tip_correction_model, threeD_correction=threeD_correction)
+    results = BEMTResult(rotor = rotor, TSR = TSR, tip_correction_model=tip_correction_model, threeD_correction_model=threeD_correction_model)
     
     for k, tsr in enumerate(TSR):  
         x = r_R*tsr                 
@@ -103,7 +115,7 @@ def bemt(rotor: Rotor,TSR:Union[float, Iterable], Cd_null:bool = False, tip_corr
             phi = np.arctan((1-a)/(1+a_line)/x)
             
             # Step 2.5 - Tip Correction
-            F = tip_correction(phi,1/r_R, rotor.number_of_blades, model= tip_correction_model)
+            F = tip_hub_correction(phi,1/r_R, rotor.number_of_blades, model= tip_correction_model, rhub_R=rhub_R)
             
             # Step 3 - Compute local angle of attack
             alpha = phi - theta 
@@ -111,6 +123,10 @@ def bemt(rotor: Rotor,TSR:Union[float, Iterable], Cd_null:bool = False, tip_corr
             # Step 4 - Compute local lift and drag coefficients
             Cl = Cl_extra(alpha)
             Cd = Cd_extra(alpha)
+            
+            # Step 4.5 - ThreeD Correction
+            if threeD_correction_model is not None:
+                Cl, Cd = threeD_correction(r_R=r_R, c_R=c_R, a = a, Cl=Cl, Cd=Cd, alpha=alpha, phi=phi, tip_speed_ratio=tsr, model=threeD_correction_model)
             
             # Step 5 - Compute local Cn and Ct
             Cn = Cl*np.cos(phi) + Cd*np.sin(phi)
@@ -162,7 +178,6 @@ def bemt(rotor: Rotor,TSR:Union[float, Iterable], Cd_null:bool = False, tip_corr
                 a_line_new = np.zeros(len(x))
 
         # Step 8 - Compute local thrust and power
-        dC_P = 4 * np.pi * sigma**2 * (1- a)**3 * Ct/(c_R * rotor.number_of_blades * tsr * (1 + a_line) * np.tan(phi) * np.sin(phi)**2)
         dC_T = rotor.number_of_blades * Cn * (1 - a)**2 *c_R/(np.sin(phi)**2 * np.pi * tsr)
         dC_P = x * rotor.number_of_blades * Ct * (1 - a)**2 *c_R/(np.sin(phi)**2 * np.pi*tsr)
         
