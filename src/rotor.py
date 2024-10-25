@@ -1,3 +1,4 @@
+import pickle
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -107,9 +108,9 @@ class Rotor:
         self.Cd_opt = line_max_re['cd_opt']
         
         
-    def blade_design(self, r_R0:float = 0.3, solidity:str = 'Cn', plot:bool = True):
+    def blade_design(self, r0_R:float = 0.3, solidity:str = 'Cn', plot:bool = True, filter_invalid_solidity:bool = True):
         ### Define stations and local rotational speed ratio
-        r_R = np.linspace(r_R0, 1, self.number_of_sections)
+        r_R = np.linspace(r0_R, 1, self.number_of_sections)
         x = r_R*self.tip_speed_ratio
         
         ### Induction Factors
@@ -134,19 +135,22 @@ class Rotor:
         ### Chord Distribution
         phi_rad = np.deg2rad(phi)
 
-        F = tip_correction(phi_rad, self.tip_speed_ratio/x, self.number_of_blades, model = self.tip_correction_model)
+        F = tip_hub_correction(phi_rad, self.tip_speed_ratio/x, self.number_of_blades, model = self.tip_correction_model)
 
         # Tangential and normal force coefficient
         Ct = self.Cl_opt*np.sin(phi_rad) - self.Cd_opt*np.cos(phi_rad)
         Cn = self.Cl_opt*np.cos(phi_rad) + self.Cd_opt*np.sin(phi_rad)
         
         # Solidity
-        if solidity == 'Cn':
-            sigma = 4*a*np.sin(phi_rad)**2 / (1 - a)/Cn
-        elif solidity == 'Ct':
-            sigma = 4*x*a_line * np.sin(phi_rad)**2/(1 - a)/Ct
+        match solidity:
+            case 'Cn':
+                sigma = 4*a*np.sin(phi_rad)**2 / (1 - a)/Cn
+            case 'Ct':
+                sigma = 4*x*a_line * np.sin(phi_rad)**2/(1 - a)/Ct
+            case 'Cl':             
+                sigma = 4*x*a_line/np.sqrt((1 - a)**2 + x**2*(1+a_line)**2)/self.Cl_opt
         
-        if np.any(sigma > 1): 
+        if np.any(sigma > 1) and filter_invalid_solidity: 
             valid_points = sigma < 1
             sigma = sigma[valid_points]
             r_R = r_R[valid_points]
@@ -158,6 +162,7 @@ class Rotor:
             F = F[valid_points]
             Cn = Cn[valid_points]
             Ct = Ct[valid_points]
+            print(fr'Warning TSR = {self.tip_speed_ratio}: solidity > 1 - This Points will be ignored')
         
         self.number_of_sections_useful = len(sigma)
         
@@ -209,3 +214,27 @@ class Rotor:
             ax2.legend()
             ax2.grid()
             plt.show()
+    
+    def save(self, name:str):
+        if not name.endswith('.pkl'):
+            name = name + '.pkl'
+        with open(rotor_path.joinpath(name), 'rb') as file:
+            pickle.dump(self, file)
+    @staticmethod
+    def load(name:str):
+        if name.endswith('.pkl'):
+            with open(rotor_path.joinpath(name), 'rb') as file:
+                return pickle.load(file)
+        elif name.endswith('.json'):
+            with open(rotor_path.joinpath(name), 'rb') as file:
+                data = pickle.load(file)
+                rotor = Rotor(
+                    number_of_blades = data['number_of_blades'],
+                    tip_speed_ratio=data['tip_speed_ratio'],
+                    number_of_sections=data['number_of_sections'],
+                    Cl_opt=data['Cl_opt'],
+                    Cd_opt=data['Cd_opt'],
+                    )
+                
+                rotor.sections = data['sections']
+                return rotor
