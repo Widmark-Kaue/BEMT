@@ -15,6 +15,7 @@ class BEMTResult:
     TSR: Iterable[float]
     tip_correction_model: str
     threeD_correction_model: str
+    
     def __post_init__(self):
         self.CP = np.zeros(len(self.TSR))
         self.CT = np.zeros(len(self.TSR))
@@ -36,12 +37,16 @@ class BEMTResult:
         self.error = list()
 
 def bemt(
-    rotor: Rotor,
+    rotor:Rotor,
     TSR:Union[float, Iterable], 
     Cd_null:bool = False, 
     tip_correction_model:str = 'Prandtl',
-    hub_correction: bool = False,
-    threeD_correction_model: str = None, 
+    hub_correction:bool = False,
+    threeD_correction_model:str = None,
+    initial_guess:tuple = None,
+    boundary_conditions:bool = True,
+    display:bool = False,
+    damping_factor:float = 0.05,
     iter:int = 100, 
     tol:float = 1e-3) -> BEMTResult:
     
@@ -86,20 +91,32 @@ def bemt(
         TSR = np.array([TSR])
         
     # Step 0 - Prepare geometric parameters (Using intermediate points to avoid edge effects)
-    r_R = rotor.sections['r_R'].to_numpy()[1:-1]
-    c_R = rotor.sections['c_R'].to_numpy()[1:-1] * rotor.sections['tip_correction'].to_numpy()[1:-1]
-    sigma = rotor.sections['sigma'].to_numpy()[1:-1] * rotor.sections['tip_correction'].to_numpy()[1:-1]
-    theta = np.deg2rad(rotor.sections['theta_opt'].to_numpy()[1:-1])
-
+    if boundary_conditions:
+        r_R = rotor.sections['r_R'].to_numpy()[1:-1]
+        c_R = rotor.sections['c_R'].to_numpy()[1:-1] * rotor.sections['tip_correction'].to_numpy()[1:-1]
+        sigma = rotor.sections['sigma'].to_numpy()[1:-1] * rotor.sections['tip_correction'].to_numpy()[1:-1]
+        theta = np.deg2rad(rotor.sections['theta_opt'].to_numpy()[1:-1])
+    else:
+        r_R = rotor.sections['r_R'].to_numpy()
+        c_R = rotor.sections['c_R'].to_numpy() * rotor.sections['tip_correction'].to_numpy()
+        sigma = rotor.sections['sigma'].to_numpy() * rotor.sections['tip_correction'].to_numpy()
+        theta = np.deg2rad(rotor.sections['theta_opt'].to_numpy())
+        
     # Step 0.5 - Prepare BEMT parameters
     results = BEMTResult(rotor = rotor, TSR = TSR, tip_correction_model=tip_correction_model, threeD_correction_model=threeD_correction_model)
     
-    for k, tsr in enumerate(TSR):  
+    for k, tsr in enumerate(TSR):
+        if display:
+            print(f'TSR: {tsr:}')
         x = r_R*tsr                 
 
         # Step 1 - Initialize the BEMT parameters
-        a =  rotor.sections['a'].to_numpy()[1:-1]
-        a_line = rotor.sections['a_line'].to_numpy()[1:-1]
+        if initial_guess is not None:
+            a , a_line = initial_guess
+        else:
+            a =  np.zeros(len(x))
+            a_line = np.zeros(len(x))
+        
         a_new =  np.zeros(len(x))
         a_line_new = np.zeros(len(x))
         
@@ -172,8 +189,8 @@ def bemt(
                 break
             else:
                 # Update the induction factors
-                a = a_new.copy()
-                a_line = a_line_new.copy()
+                a = a + damping_factor * (a_new.copy() - a)
+                a_line = a_line + damping_factor * (a_line_new.copy() - a_line)
                 a_new = np.zeros(len(x))
                 a_line_new = np.zeros(len(x))
 
@@ -182,8 +199,9 @@ def bemt(
         dC_P = x * rotor.number_of_blades * Ct * (1 - a)**2 *c_R/(np.sin(phi)**2 * np.pi*tsr)
         
         # Include boundary conditions
-        dC_T = np.concatenate(([0], dC_T, [0]))
-        dC_P = np.concatenate(([0], dC_P, [0]))
+        if boundary_conditions:
+            dC_T = np.concatenate(([0], dC_T, [0]))
+            dC_P = np.concatenate(([0], dC_P, [0]))
 
         
         # Step 9 - Compute total thrust and power
@@ -196,19 +214,33 @@ def bemt(
         results.CT[k] = C_T
         results.dCP[:,k] = dC_P
         results.dCT[:,k] = dC_T
-        results.dCn[1:-1,k] = Cn
-        results.dCt[1:-1,k] = Ct
-        results.phi[1:-1,k] = phi
-        results.alpha[1:-1,k] = alpha
         
-        results.a[1:-1,k] = a
-        results.a_line[1:-1,k] = a_line
+        if boundary_conditions:
+            results.dCn[1:-1,k] = Cn
+            results.dCt[1:-1,k] = Ct
+            results.phi[1:-1,k] = phi
+            results.alpha[1:-1,k] = alpha
+            
+            results.a[1:-1,k] = a
+            results.a_line[1:-1,k] = a_line
+        else:
+            results.dCn[:,k] = Cn
+            results.dCt[:,k] = Ct
+            results.phi[:,k] = phi
+            results.alpha[:,k] = alpha
+            
+            results.a[:,k] = a
+            results.a_line[:,k] = a_line
+             
         results.x[:,k] = x_full
         
         
         results.iterations[k] = i
         results.converged[k] = converged
         results.error.append(np.array(error))
+        
+        if display:
+            print(f"-> Iteration: {i}, Converged: {converged}")
             
     
     return results
