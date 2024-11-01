@@ -1,7 +1,9 @@
-import pickle
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+
+import json
+import pickle
 
 from scipy.optimize import root
 from scipy.integrate import simpson
@@ -15,11 +17,13 @@ class Rotor:
     number_of_blades: int
     tip_speed_ratio: float
     number_of_sections: int
+    number_of_sections_useful:int = field(default=None, repr=False, init=False)
     airfoil_name: str = field(default=None, repr=False)
+    airfoil_coord: np.ndarray = field(default_factory = lambda: np.empty((1, 2)), repr=False, init=False)
     alpha_opt: float = field(default=None, repr=False)
     Cl_opt: float = field(default=None, repr=False)
     Cd_opt: float = field(default=None, repr=False)
-    tip_correction_model:str = field(default='Prandtl')
+    tip_correction_model:str = field(default=None)
     rotor_name:str = field(default=None, repr=False)
     CP_opt:float = field(init=False, default=None, repr=False)
     CT_opt:float = field(init=False, default=None, repr=False)
@@ -40,7 +44,7 @@ class Rotor:
         assert self.airfoil_name is not None, 'Airfoil name is not defined'
         
         #Load airfoil points
-        x, y = np.loadtxt(airfoil_path.joinpath(f'{self.airfoil_name}.dat'), skiprows=1, unpack=True)
+        airfoil_coord = np.loadtxt(airfoil_path.joinpath(f'{self.airfoil_name}.dat'), skiprows=1)
 
         ####  Load c_drg file and plot Cl/Cd x alpha
         c_lift_drag = process_file(airfoil_path.joinpath(f'{self.airfoil_name}_c_drg.txt'))
@@ -83,7 +87,7 @@ class Rotor:
             
             # Arifoil plot
             ax_inset = fig.add_axes([0.65, 0.15, 0.25, 0.25])
-            ax_inset.plot(x, y, 'k', label = self.airfoil_name)
+            ax_inset.plot(airfoil_coord[:,0], airfoil_coord[:,1], 'k', label = self.airfoil_name)
             
             ax_inset.set_xticks([])
             ax_inset.set_yticks([])
@@ -106,9 +110,10 @@ class Rotor:
         self.alpha_opt = line_max_re['alpha_opt']
         self.Cl_opt = line_max_re['cl_opt']
         self.Cd_opt = line_max_re['cd_opt']
+        self.airfoil_coord = airfoil_coord
         
         
-    def blade_design(self, r0_R:float = 0.3, solidity:str = 'Cn', plot:bool = True, filter_invalid_solidity:bool = True):
+    def blade_design(self, r0_R:float = 0.1, solidity:str = 'Cn', plot:bool = True, filter_invalid_solidity:bool = True):
         ### Define stations and local rotational speed ratio
         r_R = np.linspace(r0_R, 1, self.number_of_sections)
         x = r_R*self.tip_speed_ratio
@@ -135,8 +140,9 @@ class Rotor:
         ### Chord Distribution
         phi_rad = np.deg2rad(phi)
 
+        # Tip Correction
         F = tip_hub_correction(phi_rad, self.tip_speed_ratio/x, self.number_of_blades, model = self.tip_correction_model)
-
+        
         # Tangential and normal force coefficient
         Ct = self.Cl_opt*np.sin(phi_rad) - self.Cd_opt*np.cos(phi_rad)
         Cn = self.Cl_opt*np.cos(phi_rad) + self.Cd_opt*np.sin(phi_rad)
@@ -215,26 +221,64 @@ class Rotor:
             ax2.grid()
             plt.show()
     
-    def save(self, name:str):
+    def blade_geometry(self) -> tuple:
+        r_R = self.sections['r_R'].to_numpy()
+        c_R = self.sections['c_R'].to_numpy() * self.sections['tip_correction'].to_numpy()
+        theta = np.deg2rad(self.sections['theta_opt'].to_numpy())
+        airfoil_coord = self.airfoil_coord
+        
+        le = np.zeros((len(r_R), 2))
+        te = np.zeros((len(r_R), 2))
+        le[:,0] = r_R 
+        te[:,0] = r_R 
+        
+        le[:,1] = c_R/2 
+        te[:,1] = - c_R/2 
+       
+        return le, te
+    
+    @staticmethod
+    def save(obj, name:str):
         if not name.endswith('.pkl'):
-            name = name + '.pkl'
-        with open(rotor_path.joinpath(name), 'rb') as file:
-            pickle.dump(self, file)
+            name = name + '.obj'
+        with open(rotor_path.joinpath(name), 'wb') as file:
+            pickle.dump(obj, file)
     @staticmethod
     def load(name:str):
-        if name.endswith('.pkl'):
-            with open(rotor_path.joinpath(name), 'rb') as file:
-                return pickle.load(file)
-        elif name.endswith('.json'):
-            with open(rotor_path.joinpath(name), 'rb') as file:
-                data = pickle.load(file)
-                rotor = Rotor(
-                    number_of_blades = data['number_of_blades'],
-                    tip_speed_ratio=data['tip_speed_ratio'],
-                    number_of_sections=data['number_of_sections'],
-                    Cl_opt=data['Cl_opt'],
-                    Cd_opt=data['Cd_opt'],
-                    )
-                
-                rotor.sections = data['sections']
-                return rotor
+        path = rotor_path.joinpath(name)
+        if path.exists():
+            if name.endswith('.obj'):
+                with open(path, 'rb') as file:
+                    return pickle.load(file)
+            elif name.endswith('.json'):
+                with open(path, 'r') as file:
+                    data = json.load(file)
+                    tip_speed_ratio = data['R']*data['omega']/data['V0']
+                    rotor = Rotor(
+                        number_of_blades = data['number_of_blades'],
+                        tip_speed_ratio=tip_speed_ratio,
+                        number_of_sections=len(data['sections']['r']),
+                        Cl_opt=data['Cl'],
+                        Cd_opt=data['Cd'],
+                        )
+                    
+                    
+                    
+                    rotor.number_of_sections_useful = len(data['sections']['r'])
+                    sections = pd.DataFrame(data['sections'])
+                    sections['r_R'] = sections['r']/data['R']
+                    sections['x'] = sections['r_R']*rotor.tip_speed_ratio
+                    sections['c_R'] = sections['c']/data['R']
+                    sections['sigma'] = sections['c']*rotor.number_of_blades/(2*np.pi*sections['r'])
+                    
+                    sections['theta_opt'] = sections['theta_p'] + data['beta']
+                    sections['phi'] = np.arctan( (1-sections['a'])/(1+sections['a_line'])/sections['x'])
+                    
+                    
+                    Vrel = data['V0']*(1 - sections['a'])/np.sin(sections['phi'])
+                    factor = 0.5*data['rho']*sections['c']*Vrel**2  
+                    sections['Ct'] = sections['pT']/factor
+                    sections['Cn'] = sections['pN']/factor
+
+                    rotor.sections = sections
+                    return rotor
