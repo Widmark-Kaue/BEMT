@@ -40,7 +40,7 @@ class Rotor:
         if self.rotor_name is None:
             self.rotor_name = f'Rotor {self._rotor_count}'
     
-    def load_airfoil_prop(self, plot:bool = True):
+    def load_airfoil_prop(self, plot:bool = True) -> None:
         assert self.airfoil_name is not None, 'Airfoil name is not defined'
         
         #Load airfoil points
@@ -59,7 +59,7 @@ class Rotor:
         if plot:
             # Colors for plotting
             colors = list(BASE_COLORS.keys())
-            fig, ax = plt.subplots(figsize=[10, 4.8])
+            fig, ax = plt.subplots(figsize=[8, 4.8])
         
         for i, col in enumerate(cols):
             re.append(float(col.split()[-1]))
@@ -78,7 +78,7 @@ class Rotor:
 
 
         if plot:
-            ax.set_title(r'L/D x $\alpha$')
+            # ax.set_title(r'L/D x $\alpha$')
             ax.set_xlabel(r'$\alpha$ [deg]')
             ax.set_ylabel('Cl/Cd')
 
@@ -95,7 +95,7 @@ class Rotor:
             ax_inset.set_yticklabels([])
             ax_inset.axis('equal')
             ax_inset.legend()
-        
+            # plt.tight_layout()
             plt.show()
  
         df_opt = pd.DataFrame({
@@ -111,7 +111,8 @@ class Rotor:
         self.Cl_opt = line_max_re['cl_opt']
         self.Cd_opt = line_max_re['cd_opt']
         self.airfoil_coord = airfoil_coord
-        
+        if plot:
+            return fig
         
     def blade_design(self, r0_R:float = 0.1, solidity:str = 'Cn', plot:bool = True, filter_invalid_solidity:bool = True):
         ### Define stations and local rotational speed ratio

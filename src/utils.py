@@ -122,8 +122,8 @@ def threeD_correction(r_R:np.ndarray, c_R:np.ndarray, a:np.ndarray, Cl_2d:np.nda
             f_Cd = 0
             f_Cl = 3.1*c_r**2
         case 'Lindenburg':
-            f_Cd_= 0
-            f_Cl_ = 3.1*(x*np.sin(phi)/(1 - a) * c_r)**2
+            f_Cd = 0
+            f_Cl = 3.1*(x*np.sin(phi)/(1 - a) * c_r)**2
         case 'Du and Selig':
             LAMBDA = tip_speed_ratio * np.sin(phi)/(1 - a)
             

@@ -42,6 +42,7 @@ def bemt(
     Cd_null:bool = False, 
     tip_correction_model:str = 'Prandtl',
     hub_correction:bool = False,
+    rhub_R:float = None,
     threeD_correction_model:str = None,
     initial_guess:tuple = None,
     boundary_conditions:bool = True,
@@ -83,9 +84,10 @@ def bemt(
     if Cd_null:
         Cd_extra = lambda alpha: 0
     
-    rhub_R = None
+    
     if hub_correction:
-        rhub_R = rotor.sections['r_R'].to_numpy()[0]        
+        if rhub_R is None:
+            rhub_R = rotor.sections['r_R'].to_numpy()[0]        
     
     if not isinstance(TSR, Iterable):
         TSR = np.array([TSR])
@@ -143,8 +145,15 @@ def bemt(
             
             # Step 4.5 - ThreeD Correction
             if threeD_correction_model is not None:
-                Cl, Cd = threeD_correction(r_R=r_R, c_R=c_R, a = a, Cl=Cl, Cd=Cd, alpha=alpha, phi=phi, tip_speed_ratio=tsr, model=threeD_correction_model)
-            
+                pos = r_R >= 0.25
+                Cl_3D, Cd_3D = threeD_correction(
+                    r_R=r_R[pos], c_R=c_R[pos], a = a[pos], 
+                    Cl_2d=Cl[pos], Cd_2d=Cd[pos], 
+                    alpha=alpha[pos], phi=phi[pos], 
+                    tip_speed_ratio=tsr, model=threeD_correction_model)
+                
+                Cl[pos] = Cl_3D
+                Cd[pos] = Cd_3D
             # Step 5 - Compute local Cn and Ct
             Cn = Cl*np.cos(phi) + Cd*np.sin(phi)
             Ct = Cl*np.sin(phi) - Cd*np.cos(phi)
