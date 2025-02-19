@@ -3,6 +3,9 @@
 Implementation of Blade Element Momentum Theory and case study for Aerodynamics of wind turbine and rotating blades (AA-204) course. 
 This project implements the Blade Element Momentum Theory (BEMT), which is a technique used to calculate the aerodynamic performance of wind turbines and propellers.
 
+# Hanson's Method
+Implementation of Hanson method to predict tonal noise of rotating blade using Actuactor Line Simulation inputs and BEMT inputs.
+
 ## Installation
 
 ### Prerequisites
