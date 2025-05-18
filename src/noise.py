@@ -12,6 +12,7 @@ class noise:
     sound_speed: float = field(default=340)
     density:float = field(default=1.22)
     
+    @property
     def microphones_to_polar(self)-> np.ndarray:
         x = self.microphones[:,0]
         y = self.microphones[:,1]
@@ -26,32 +27,32 @@ class farfield(noise):
     
     
     """ Funções auxiliares """
-    def __check_function__(self, method, **kwargs)-> any:
-        if not hasattr(self, method):
-            raise ValueError(f"Method '{method}' not found in TonalNoiseModel.")
+    # def __check_function__(self, method, **kwargs)-> any:
+    #     if not hasattr(self, method):
+    #         raise ValueError(f"Method '{method}' not found in TonalNoiseModel.")
         
-        method_fn = getattr(self, method)
-        sig = inspect.signature(method_fn)
-        param_dict = sig.parameters
+    #     method_fn = getattr(self, method)
+    #     sig = inspect.signature(method_fn)
+    #     param_dict = sig.parameters
 
-        # Lista de argumentos esperados (exceto 'self')
-        expected_args = [k for k in param_dict if k != 'self']
+    #     # Lista de argumentos esperados (exceto 'self')
+    #     expected_args = [k for k in param_dict if k != 'self']
         
-        # Checagem de argumentos inesperados
-        for k in kwargs:
-            if k not in expected_args:
-                raise ValueError(f"Argumento inesperado '{k}' para o método '{method}'. Esperados: {expected_args}")
+    #     # Checagem de argumentos inesperados
+    #     for k in kwargs:
+    #         if k not in expected_args:
+    #             raise ValueError(f"Argumento inesperado '{k}' para o método '{method}'. Esperados: {expected_args}")
 
-        # Checagem de argumentos obrigatórios (sem default)
-        required_args = [
-            k for k, v in param_dict.items()
-            if k not in ['self', 'number_of_harmonics']
-            and v.default is inspect.Parameter.empty
-        ]
-        missing = [k for k in required_args if k not in kwargs]
-        if missing:
-            raise ValueError(f"Argumentos obrigatórios ausentes para o método '{method}': {missing}")
-        return method_fn
+    #     # Checagem de argumentos obrigatórios (sem default)
+    #     required_args = [
+    #         k for k, v in param_dict.items()
+    #         if k not in ['self', 'number_of_harmonics']
+    #         and v.default is inspect.Parameter.empty
+    #     ]
+    #     missing = [k for k in required_args if k not in kwargs]
+    #     if missing:
+    #         raise ValueError(f"Argumentos obrigatórios ausentes para o método '{method}': {missing}")
+    #     return method_fn
         
     def __psiVDL__(self, kx: float, hanson_aproximation:bool = True)-> tuple:
         """
@@ -66,11 +67,11 @@ class farfield(noise):
                 return V, DL, DL
     
     """ Methods """
-    def loading_noise(self, method:str = 'hansonReff', number_of_harmonics:int = 1, **kwargs):
-        method_fn = self.__check_function__(method, **kwargs)
+    # def loading_noise(self, method:str = 'hansonReff', number_of_harmonics:int = 1, **kwargs):
+    #     method_fn = self.__check_function__(method, **kwargs)
         
-        # Chamada do método
-        return method_fn(number_of_harmonics=number_of_harmonics, **kwargs)
+    #     # Chamada do método
+    #     return method_fn(number_of_harmonics=number_of_harmonics, **kwargs)
 
     
     def hansonReff(
@@ -96,7 +97,7 @@ class farfield(noise):
         # Microphone positions
         nmics = self.microphones.shape[0]
         yVec = self.microphones[:,1]
-        thetaVec = self.microphones_to_polar()[:, 1]
+        thetaVec = self.microphones_to_polar[:, 1]
         
         # Initialize variables
         PLoad = np.zeros((nmics, number_of_harmonics))
@@ -134,7 +135,8 @@ class farfield(noise):
             PLoad = PLoad*1j
             
         if rms:
-            PLoad = np.abs(PLoad)/np.sqrt(2)
+            Prms = np.abs(PLoad) *np.sqrt(2)/2
+            return Prms
         return PLoad
         
     def garrickWatkinsReff(

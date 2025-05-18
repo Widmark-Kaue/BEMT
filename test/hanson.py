@@ -10,13 +10,14 @@ from src.noise import farfield
 
 #%% Load data from Casalino, et al. (2021)
 patternName = 'casalino_2021.txt'
-path = Path()
+path = Path('validate_data', 'noise')
 
-if not path.joinpath('CTxJ_'+patternName).exists():
-    path = Path('test')
+if not path.exists():
+    path = Path('..', 'validate_data', 'noise')
 
-J_CT = np.loadtxt(path.joinpath('CTxJ_'+patternName))
-J_CP = np.loadtxt(path.joinpath('CPxJ_'+patternName))
+
+J_CT = np.loadtxt(path.joinpath('JxCT_'+patternName))
+J_CP = np.loadtxt(path.joinpath('JxCP_'+patternName))
   
 J = np.linspace(J_CT[0,0], J_CT[-1,0], 100)
 J = J[(J >= J_CP[0,0]) * (J <= J_CP[-1, 0])]
@@ -38,47 +39,72 @@ plt.legend()
 plt.grid()
 plt.show()
 # %% Hanson Method (Effectiv Radius) - Test With Carvalho, 2023 Data
+
+
 # Set Constants
-D = 0.3         # m
-RPM = 5000        # RPM
-n = RPM/60
-
-
-
-
-## J  = 0.4 -> V0 = 10 m/s
-Re = 99700
-kinematic_vicosity = D**2 * np.pi*n/(2*Re) # m^2/s
-viscosity = 1.81e-5                        # Pa.s
-density = viscosity/kinematic_vicosity     # kg/m^3
-
-
-CT_J04 = CT(0.4)*1e-1
-CP_J04 = CP(0.4)*1e-1
-
-# T_J04 =                 
-
-
-# Noise Model
-model = TonalNoiseModel(microphones = mics, density = density)
-
-Mt = D*np.pi*n / model.sound_speed
+D = 0.3             # m
+RPM = 5000          # RPM
+n = RPM/60          # Hz
+Omega =  n*2*np.pi  # rad/s
+Mt = 0.23
+Pref = 2e-5         # Pa
 
 # Microphones positions
 mics = np.array([
     np.linspace(-0.9, 0.9, 13), # x coord
     4*D * np.ones(13),          # y coord
     np.zeros(13)                # z coord
-])
+]).T
 
+# Noise case
+case = farfield(microphones = mics)
+rho = case.density
+
+## ###########################
+# J  = 0.4 -> V0 = 10 m/s
+## ###########################
+
+# Re = 99700
+# kinematic_vicosity = D**2 * np.pi*n/(2*Re) # m^2/s
+# viscosity = 1.81e-5                        # Pa.s
+# rho = viscosity/kinematic_vicosity     # kg/m^3
+
+
+CT_J04 = CT(0.4)*1e-1
+CP_J04 = CP(0.4)*1e-1
+
+T_J04 = CT_J04 * rho * D**4 * n**2          
+W_J04 = CP_J04 * rho * D**5 * n**3
+Q_J04 = W_J04/Omega
+
+print(f'Q_J04 = {Q_J04:.2f} N m')
+print(f'T_J04 = {T_J04:.2f} N')
+
+
+# Noise Evaluate
 kwargs = dict(
+    number_of_harmonics = 1,
     number_of_blades = 2,
     rtip = D/2,
     zeff = 0.8,
-    Mt = (n * 2*np.pi/60 * D/2) /model.sound_speed,
+    Mt = Mt,
     Mx = 0,
     BD = 0.05,
-    loading = np.array([0.2, 0.2]),
-    rms = True
+    loading = np.array([T_J04, Q_J04]),
+    rms = True,
+    include_imag_part = True
 )
+
+prms = case.hansonReff(**kwargs)
+spl = 20* np.log10(prms/Pref)
+
+theta = np.rad2deg(case.microphones_to_polar[:,1])
+
+plt.plot(theta, spl, 'b')
+plt.xlabel(r'$\theta$ [deg]')
+plt.ylabel('SPL [dB]')
+
+# plt.box(True)
+plt.grid()
+plt.show()
 # %%
