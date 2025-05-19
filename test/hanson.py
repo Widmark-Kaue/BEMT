@@ -1,9 +1,13 @@
 #%% Lib
 import numpy as np
+import pandas as pd
 import matplotlib.pyplot as plt
+
+
 import matplotlib.ticker as ticker
 import matplotlib.cm as cm
 
+from matplotlib.gridspec import GridSpec
 from scipy.interpolate import interp1d
 from pathlib import Path
 from src.noise import farfield
@@ -38,8 +42,15 @@ plt.ylabel(r'$C_{T,P} \times 10^1$' + '[-]')
 plt.legend()
 plt.grid()
 plt.show()
+
+
 # %% Hanson Method (Effectiv Radius) - Test With Carvalho, 2023 Data
 
+# Create figure object
+fig = plt.figure(figsize=[12, 4.8])
+gs = GridSpec(1, 2)
+ax1 = fig.add_subplot(gs[0, 0])
+ax2 = fig.add_subplot(gs[0, 1])
 
 # Set Constants
 D = 0.3             # m
@@ -60,14 +71,26 @@ mics = np.array([
 case = farfield(microphones = mics)
 rho = case.density
 
+
+# Noise Evaluate
+kwargs = dict(
+    number_of_harmonics = 1,
+    number_of_blades = 2,
+    rtip = D/2,
+    zeff = 0.8,
+    Mt = Mt,
+    Mx = 0,
+    BD = 0.05,
+    loading = np.zeros(2),
+    rms = True,
+    include_imag_part = True
+)
+
+
 ## ###########################
 # J  = 0.4 -> V0 = 10 m/s
 ## ###########################
-
-# Re = 99700
-# kinematic_vicosity = D**2 * np.pi*n/(2*Re) # m^2/s
-# viscosity = 1.81e-5                        # Pa.s
-# rho = viscosity/kinematic_vicosity     # kg/m^3
+df_J04 = pd.read_excel(path.joinpath('thetaxSPL_carvalho2023.xlsx'), sheet_name='J04')
 
 
 CT_J04 = CT(0.4)*1e-1
@@ -80,31 +103,62 @@ Q_J04 = W_J04/Omega
 print(f'Q_J04 = {Q_J04:.2f} N m')
 print(f'T_J04 = {T_J04:.2f} N')
 
-
-# Noise Evaluate
-kwargs = dict(
-    number_of_harmonics = 1,
-    number_of_blades = 2,
-    rtip = D/2,
-    zeff = 0.8,
-    Mt = Mt,
-    Mx = 0,
-    BD = 0.05,
-    loading = np.array([T_J04, Q_J04]),
-    rms = True,
-    include_imag_part = True
-)
+kwargs['loading'] = np.array([T_J04, Q_J04])
 
 prms = case.hansonReff(**kwargs)
 spl = 20* np.log10(prms/Pref)
 
 theta = np.rad2deg(case.microphones_to_polar[:,1])
 
-plt.plot(theta, spl, 'b')
-plt.xlabel(r'$\theta$ [deg]')
-plt.ylabel('SPL [dB]')
+ax1.plot(theta, spl, 'b', label = 'Implemented')
+ax1.plot(df_J04['Model-Theta'], df_J04['Model-SPL'], 'k', label = 'Carvalho,2023')
+ax1.plot(df_J04['Exp-Theta'], df_J04['Exp-SPL'], 'ko', label = 'Casalino,2021')
 
-# plt.box(True)
-plt.grid()
+
+ax1.set_title('J = 0.4')
+ax1.set_xlabel(r'$\theta$ [deg]')
+ax1.set_ylabel('SPL [dB]')
+
+ax1.set_ylim([52, 67])
+
+ax1.legend(loc = 'lower right')
+ax1.grid()
+# plt.show()
+
+## ###########################
+# J  = 0.6 -> V0 = 15 m/s
+## ###########################
+df_J06 = pd.read_excel(path.joinpath('thetaxSPL_carvalho2023.xlsx'), sheet_name='J06')
+
+
+CT_J06 = CT(0.6)*1e-1
+CP_J06 = CP(0.6)*1e-1
+
+T_J06 = CT_J06 * rho * D**4 * n**2          
+W_J06 = CP_J06 * rho * D**5 * n**3
+Q_J06 = W_J06/Omega
+
+print(f'Q_J06 = {Q_J06:.2f} N m')
+print(f'T_J06 = {T_J06:.2f} N')
+
+kwargs['loading'] = np.array([T_J06, Q_J06])
+
+prms = case.hansonReff(**kwargs)
+spl = 20* np.log10(prms/Pref)
+
+ax2.plot(theta, spl, 'b', label = 'Implemented')
+ax2.plot(df_J06['Model-Theta'], df_J06['Model-SPL'], 'k', label = 'Carvalho,2023')
+ax2.plot(df_J06['Exp-Theta'], df_J06['Exp-SPL'], 'ko', label = 'Casalino,2021')
+
+
+ax2.set_title('J = 0.6')
+ax2.set_xlabel(r'$\theta$ [deg]')
+ax2.set_ylabel('SPL [dB]')
+
+ax2.set_ylim([52, 67])
+# ax2.legend(loc = 'lower right')
+ax2.grid()
+
+plt.tight_layout()
 plt.show()
 # %%
