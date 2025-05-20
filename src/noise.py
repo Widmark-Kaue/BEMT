@@ -97,7 +97,9 @@ class farfield(noise):
         # Microphone positions
         nmics = self.microphones.shape[0]
         yVec = self.microphones[:,1]
-        thetaVec = self.microphones_to_polar[:, 1]
+        theta1Vec = self.microphones_to_polar[:, 1]
+        thetaVec = np.arccos( np.cos(theta1Vec) * np.sqrt(1 - Mx**2 * np.sin(theta1Vec)**2) + Mx * np.sin(theta1Vec)**2)  
+        
         
         # Initialize variables
         PLoad = np.zeros((nmics, number_of_harmonics))
@@ -145,14 +147,14 @@ class farfield(noise):
         number_of_blades:int, 
         reff: float,
         loading:np.array,
-        Mtip:float, 
+        Mrot:float, 
         Mx:float=0, 
         ):
          
         # Define short variable names
         B = number_of_blades
         m = np.arange(1, number_of_harmonics+1)
-        k = m*B*Mtip/(reff)
+        k = m*B*Mrot/(reff)
         T, Q = loading
         
         # Microphone positions
@@ -175,18 +177,9 @@ class farfield(noise):
             
             PQ[imic] = cte1* (- Q*B*m/(k*reff**2)) * cte2
         
-            
-             
-            # PLoad[imic] = k/(2*np.pi*s0[imic])
-            
-            # PLoad[imic] *= np.abs(T*(Mx + x[imic]/s0[imic])*(1/(beta**2)) - Q*B*m/(k*reff**2))
-            
-            # PLoad[imic] *= jv(m*B, k*y[imic]*reff/s0[imic]) 
         
         Prms = np.abs(PT+PQ)*np.sqrt(2)/2
-        # PTrms = np.abs(PT)*np.sqrt(2)/2
-        # PQrms = np.abs(PQ)*np.sqrt(2)/2
-        # # Prms = PTrms + PQrms
+        
         return Prms
     
 
