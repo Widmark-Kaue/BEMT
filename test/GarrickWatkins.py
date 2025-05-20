@@ -146,7 +146,7 @@ for i in range(len(Mvec)):
                         number_of_blades=B,
                         reff=Reff,
                         loading=(T*480, Q*480),
-                        Mtip=Mtip,
+                        Mrot=Mtip,
                         Mx=Mx
                     )
 
