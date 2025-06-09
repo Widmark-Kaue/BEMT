@@ -1,0 +1,14 @@
+format of data: datanekNREL(t_index,CP_index,data_index)
+- t_index: index of time (for this case, only 1 time)
+- CP_index: index of control points (nacl=22, forces and velocies are calculated only on 20 of those; first and last are saved only for geometry purposes)
+- data_index: index of data, according to the following:
+datanekNREL(:,:,1) - normalized time (t/T)
+datanekNREL(:,:,2) - normalized radius (r/R)
+datanekNREL(:,:,3) to datanekNREL(:,:,5) - velocities (spanwise,tangential,normal)
+datanekNREL(:,:,6) to datanekNREL(:,:,8) - position (x,y,z)
+datanekNREL(:,:,9) - circulation (Gamma)
+datanekNREL(:,:,10) - normal force (fn), z-direction
+datanekNREL(:,:,11) - tangential force (ft), direction orthogonal to spanwise and z
+datanekNREL(:,:,12) - flow angle (phi)
+datanekNREL(:,:,13) - lift force (fl)
+datanekNREL(:,:,14) - drag force (fd)
